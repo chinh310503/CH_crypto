@@ -141,5 +141,18 @@ def api_reset():
     return jsonify({"ok": True})
 
 
+@app.route("/reset")
+def reset_demo():
+    """Khôi phục toàn bộ số dư & khóa về ban đầu (tiện demo, không cần restart).
+    Có thể gõ thẳng http://127.0.0.1:5000/reset trên trình duyệt."""
+    global BANK
+    BANK = Bank()
+    resp = make_response(redirect("/login"))
+    resp.delete_cookie("session_token")   # token cũ hết hiệu lực sau khi reset
+    return resp
+
+
 if __name__ == "__main__":
-    app.run(debug=True, port=5000, use_reloader=False)
+    import os
+    port = int(os.environ.get("PORT", "5000"))
+    app.run(debug=True, port=port, use_reloader=False)
