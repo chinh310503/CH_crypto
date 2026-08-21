@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CryptoBank — Tài khoản</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="bank">
+  <div class="topbar">
+    <div class="brand">🏦 CryptoBank <small>Internet Banking</small></div>
+    <div class="who">
+      <span>👤 <b>{{ user.user }}</b></span>
+      <span class="badge {{ user.role }}">{{ user.role }}</span>
+      <a href="/attacker" style="color:#ff9a9a;text-decoration:none;font-size:13px">⚠ Attacker</a>
+      <a href="/logout" style="color:#cdd6e4;text-decoration:none;font-size:13px">Đăng xuất</a>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <div class="grid">
+      <div class="card">
+        <h2>Số dư khả dụng</h2>
+        <div class="balance" id="balance">…<small>{{ currency }}</small></div>
+      </div>
+
+      <div class="card">
+        <h2>Chuyển tiền</h2>
+        <form id="xferForm">
+          <label>Người nhận</label>
+          <input id="to" list="users" placeholder="vd: bob" required>
+          <datalist id="users">
+            <option value="alice"><option value="bob"><option value="carol"><option value="megacorp">
+          </datalist>
+          <label>Số tiền ({{ currency }})</label>
+          <input id="amount" type="number" min="1" required>
+          <button type="submit" style="width:100%">Chuyển</button>
+        </form>
+        <div id="xferMsg"></div>
+      </div>
+    </div>
+
+    {% if user.role == 'admin' %}
+    <div class="card" style="margin-top:20px">
+      <h2>Bảng quản trị — toàn bộ tài khoản</h2>
+      <button class="ghost" id="loadAdmin">Tải danh sách</button>
+      <div id="adminBox" style="margin-top:12px"></div>
+    </div>
+    {% endif %}
+
+    <div class="card" style="margin-top:20px">
+      <h2>Lịch sử giao dịch gần đây</h2>
+      <table>
+        <thead><tr><th>#</th><th>Từ</th><th>Đến</th><th>Số tiền</th></tr></thead>
+        <tbody id="hist"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    const CUR = "{{ currency }}";
+    async function loadAccount() {
+      const r = await fetch('/api/account');
+      if (r.status === 401) { window.location = '/login'; return; }
+      const a = await r.json();
+      document.getElementById('balance').innerHTML =
+        a.balance.toLocaleString('vi-VN') + '<small>' + CUR + '</small>';
+      document.getElementById('hist').innerHTML = a.history.slice().reverse().map(t =>
+        `<tr><td>${t.id}</td><td>${t.from}</td><td>${t.to}</td><td>${t.amount.toLocaleString('vi-VN')} ${CUR}</td></tr>`
+      ).join('') || '<tr><td colspan="4" style="color:#6b7688">Chưa có giao dịch</td></tr>';
+    }
+    document.getElementById('xferForm').onsubmit = async (e) => {
+      e.preventDefault();
+      const box = document.getElementById('xferMsg');
+      const r = await fetch('/api/transfer', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ to: document.getElementById('to').value,
+                               amount: document.getElementById('amount').value })
+      });
+      const d = await r.json();
+      box.className = 'msg ' + (d.ok ? 'ok' : 'err');
+      box.textContent = d.message;
+      if (d.ok) { loadAccount(); document.getElementById('xferForm').reset(); }
+    };
+    const adminBtn = document.getElementById('loadAdmin');
+    if (adminBtn) adminBtn.onclick = async () => {
+      const r = await fetch('/api/admin/users');
+      const box = document.getElementById('adminBox');
+      if (r.status !== 200) { box.innerHTML = '<div class="msg err">Bị từ chối</div>'; return; }
+      const d = await r.json();
+      box.innerHTML = '<table><thead><tr><th>Tài khoản</th><th>Vai trò</th><th>Số dư</th></tr></thead><tbody>' +
+        d.accounts.map(a => `<tr><td>${a.user}</td><td>${a.role}</td><td>${a.balance.toLocaleString('vi-VN')} ${CUR}</td></tr>`).join('') +
+        '</tbody></table>';
+    };
+    loadAccount();
+  </script>
+</body>
+</html>

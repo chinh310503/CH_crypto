@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ECDSA Attack Console — CryptoBank</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="attack">
+  <div class="hd">
+    <div>
+      <h1>☠ ECDSA ATTACK CONSOLE</h1>
+      <div class="sub">Khai thác trực tiếp lên hệ thống CryptoBank — 3 lỗ hổng chữ ký số</div>
+    </div>
+    <a class="back" href="/dashboard">← Về giao diện ngân hàng</a>
+  </div>
+
+  <div class="container">
+    <div class="toolbar">
+      <button id="resetBtn">↺ Reset hệ thống</button>
+      <span class="sub" id="resetMsg"></span>
+    </div>
+
+    <div class="state">
+      <h3>Trạng thái ngân hàng (số dư theo dõi trực tiếp)</h3>
+      <table>
+        <thead><tr><th>Tài khoản</th><th>Vai trò</th><th style="text-align:right">Số dư (CBC)</th></tr></thead>
+        <tbody id="stateBody"></tbody>
+      </table>
+    </div>
+
+    <div class="attacks">
+      <!-- 1. NONCE REUSE -->
+      <div class="atk">
+        <span class="tag">Nhóm A · Nonce</span>
+        <h4>1. Nonce Reuse</h4>
+        <p>Thu chữ ký giao dịch công khai → phát hiện nonce trùng → khôi phục
+           <b>khóa ký master của ngân hàng</b> → giả mạo giao dịch rút sạch tài khoản.</p>
+        <div class="log" id="log-nonce"></div>
+        <div class="impact" id="imp-nonce"></div>
+        <button data-atk="nonce_reuse" data-log="log-nonce" data-imp="imp-nonce">▶ Khai thác</button>
+      </div>
+
+      <!-- 2. PSYCHIC -->
+      <div class="atk">
+        <span class="tag">Nhóm D · Triển khai</span>
+        <h4>2. Psychic Signatures</h4>
+        <p>Gửi token phiên với chữ ký rỗng <b>(r=0, s=0)</b> tới hàm xác minh có lỗi
+           → <b>chiếm quyền admin</b> không cần mật khẩu → lộ toàn bộ tài khoản.</p>
+        <div class="log" id="log-psychic"></div>
+        <div class="impact" id="imp-psychic"></div>
+        <button data-atk="psychic" data-log="log-psychic" data-imp="imp-psychic">▶ Khai thác</button>
+      </div>
+
+      <!-- 3. POHLIG -->
+      <div class="atk">
+        <span class="tag">Nhóm C · Đường cong yếu</span>
+        <h4>3. Pohlig–Hellman</h4>
+        <p>Tài khoản enterprise dùng đường cong bậc <b>trơn</b>. Từ khóa công khai,
+           giải ECDLP khôi phục <b>khóa riêng</b> → rút sạch MegaCorp (5,000,000).</p>
+        <div class="log" id="log-pohlig"></div>
+        <div class="impact" id="imp-pohlig"></div>
+        <button data-atk="pohlig" data-log="log-pohlig" data-imp="imp-pohlig">▶ Khai thác</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const fmt = n => Number(n).toLocaleString('vi-VN');
+    let lastState = {};
+
+    async function refreshState(flash = true) {
+      const r = await fetch('/api/state');
+      const d = await r.json();
+      const body = document.getElementById('stateBody');
+      body.innerHTML = d.accounts.map(a => {
+        let cls = '';
+        if (flash && lastState[a.user] !== undefined && lastState[a.user] !== a.balance)
+          cls = a.balance < lastState[a.user] ? 'flash-down' : 'flash-up';
+        return `<tr class="${cls}"><td>${a.user}</td><td>${a.role}</td>` +
+               `<td class="amt">${fmt(a.balance)}</td></tr>`;
+      }).join('');
+      lastState = {};
+      d.accounts.forEach(a => lastState[a.user] = a.balance);
+    }
+
+    function line(html, cls) {
+      const span = document.createElement('span');
+      span.className = 'ln' + (cls ? ' ' + cls : '');
+      span.innerHTML = html;
+      return span;
+    }
+    function classify(text) {
+      if (text.includes('⚠')) return 'warn';
+      if (text.includes('✔') || text.includes('KHỚP') || text.includes('thành công')
+          || text.includes('Đã ')) return 'good';
+      return '';
+    }
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+    async function typeSteps(logEl, steps) {
+      logEl.innerHTML = '';
+      for (const s of steps) {
+        logEl.appendChild(line(s, classify(s)));
+        logEl.scrollTop = logEl.scrollHeight;
+        await sleep(420);
+      }
+    }
+
+    function renderImpact(name, box, data) {
+      box.className = 'impact show pwn';
+      if (name === 'psychic') {
+        let rows = (data.impact.leaked_accounts || []).map(a =>
+          `<tr><td>${a.user}</td><td>${a.role}</td><td style="text-align:right">${fmt(a.balance)}</td></tr>`).join('');
+        box.innerHTML = `<b>⛔ CHIẾM QUYỀN ADMIN THÀNH CÔNG</b> — không cần mật khẩu.` +
+          `<div class="leak"><table><thead><tr><th>Tài khoản</th><th>Vai trò</th><th style="text-align:right">Số dư</th></tr></thead>` +
+          `<tbody>${rows}</tbody></table></div>`;
+      } else {
+        const im = data.impact;
+        box.innerHTML = `<b>⛔ ĐÃ ĐÁNH CẮP ${fmt(im.stolen)} CBC</b> ` +
+          `(${im.victim} → ${im.attacker}).` +
+          `<div class="key">🔑 khóa khôi phục: ${data.recovered_key}</div>`;
+      }
+    }
+
+    async function runAttack(btn) {
+      const name = btn.dataset.atk;
+      const logEl = document.getElementById(btn.dataset.log);
+      const impEl = document.getElementById(btn.dataset.imp);
+      btn.disabled = true; impEl.className = 'impact';
+      await refreshState(false);                 // chụp trạng thái trước
+      const res = await fetch('/attack/' + name, { method: 'POST' });
+      const data = await res.json();
+      await typeSteps(logEl, data.steps);
+      if (data.ok) renderImpact(name, impEl, data);
+      await refreshState(true);                   // vẽ before/after (flash)
+      btn.disabled = false;
+    }
+
+    document.querySelectorAll('.atk button').forEach(b => b.onclick = () => runAttack(b));
+    document.getElementById('resetBtn').onclick = async () => {
+      await fetch('/api/reset', { method: 'POST' });
+      document.querySelectorAll('.log').forEach(l => l.innerHTML = '');
+      document.querySelectorAll('.impact').forEach(i => i.className = 'impact');
+      document.getElementById('resetMsg').textContent = 'Đã khôi phục trạng thái ban đầu.';
+      lastState = {};
+      await refreshState(false);
+      setTimeout(() => document.getElementById('resetMsg').textContent = '', 2500);
+    };
+    refreshState(false);
+  </script>
+</body>
+</html>

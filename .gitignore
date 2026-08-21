@@ -1,0 +1,52 @@
+# ===================== Python =====================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Môi trường ảo
+.venv/
+venv/
+env/
+ENV/
+.python-version
+
+# Đóng gói / build
+build/
+dist/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+
+# Cache kiểm thử / phân tích
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# ===================== Flask / web app =====================
+instance/
+.webassets-cache/
+*.sqlite3
+*.db
+.env
+.flaskenv
+
+# ===================== Trình soạn thảo / IDE =====================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ===================== Hệ điều hành =====================
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ===================== Claude Code =====================
+# Giữ lại launch.json (cấu hình chạy preview), bỏ cấu hình cá nhân/máy
+.claude/*
+!.claude/launch.json
