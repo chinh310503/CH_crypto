@@ -1,11 +1,17 @@
-"""CryptoBank — web app demo có 3 lỗ hổng ECDSA + bảng điều khiển tấn công.
+"""CryptoBank — web app demo (mô hình ví/sàn) có 3 lỗ hổng ECDSA.
+
+Web app chỉ là "nạn nhân". Tấn công do các script trong ../attack_client thực hiện
+qua HTTP, dùng đúng các API công khai của trang (không có API ẩn):
+  - POST /api/tx/submit  : nộp (broadcast) giao dịch đã ký ECDSA
+  - GET  /api/transactions: sổ cái chữ ký công khai
+  - GET  /api/accounts   : danh bạ khóa công khai + tham số đường cong
+  - GET  /api/admin/users: (cần token admin) hồ sơ PII
 
 Chạy:  python app.py    rồi mở http://127.0.0.1:5000
 """
 from flask import (Flask, request, jsonify, render_template, redirect,
                    make_response)
 
-import attacks
 from bank import Bank, CURRENCY
 
 app = Flask(__name__)
@@ -13,16 +19,14 @@ BANK = Bank()
 
 
 def current_user():
-    """Lấy ngữ cảnh người dùng từ cookie token — dùng verify_token CÓ LỖI
-    (chính là bề mặt của tấn công Psychic Signatures)."""
     tok = request.cookies.get("session_token")
     if not tok:
         return None
-    return BANK.vault.verify_token(tok)
+    return BANK.vault.verify_token(tok)          # verify có lỗ hổng psychic
 
 
 # --------------------------------------------------------------------------
-#  Giao diện ngân hàng (nạn nhân)
+#  Giao diện
 # --------------------------------------------------------------------------
 @app.route("/")
 def index():
@@ -64,6 +68,51 @@ def dashboard():
     return render_template("dashboard.html", user=u, currency=CURRENCY)
 
 
+@app.route("/monitor")
+def monitor():
+    return render_template("monitor.html", currency=CURRENCY)
+
+
+@app.route("/explorer")
+def explorer():
+    return render_template("explorer.html", currency=CURRENCY)
+
+
+# --------------------------------------------------------------------------
+#  API công khai (bề mặt tấn công đều là chức năng thật)
+# --------------------------------------------------------------------------
+@app.route("/api/transactions")
+def api_transactions():
+    return jsonify(BANK.public_transactions())
+
+
+@app.route("/api/accounts")
+def api_accounts():
+    return jsonify(BANK.account_keys())
+
+
+@app.route("/api/state")
+def api_state():
+    t = BANK.totals()
+    return jsonify({"accounts": BANK.public_accounts(), "currency": CURRENCY,
+                    "assets": t["assets"], "tx_count": t["transactions"]})
+
+
+@app.route("/api/tx/submit", methods=["POST"])
+def api_tx_submit():
+    """Nộp một giao dịch đã ký ECDSA. Server xác minh chữ ký của người gửi rồi thực
+    thi. Đây là con đường DUY NHẤT để tiền dịch chuyển (giống broadcast blockchain)."""
+    d = request.get_json(force=True)
+    try:
+        tx = {"id": int(d["id"]), "from": d["from"], "to": d["to"],
+              "amount": int(d["amount"])}
+        r, s = int(d["r"]), int(d["s"])
+    except (KeyError, TypeError, ValueError):
+        return jsonify({"ok": False, "message": "Dữ liệu không hợp lệ"}), 400
+    ok, msg = BANK.submit_tx(tx, r, s)
+    return jsonify({"ok": ok, "message": msg})
+
+
 @app.route("/api/account")
 def api_account():
     u = current_user()
@@ -72,24 +121,16 @@ def api_account():
     return jsonify(BANK.account(u["user"]))
 
 
-@app.route("/api/transactions")
-def api_transactions():
-    # CÔNG KHAI — sổ cái chữ ký (bề mặt lộ nonce trùng)
-    return jsonify(BANK.public_transactions())
-
-
-@app.route("/api/transfer", methods=["POST"])
-def api_transfer():
+@app.route("/api/wallet")
+def api_wallet():
+    """Nạp 'ví' vào trình duyệt của chính chủ tài khoản (đã đăng nhập): khóa riêng +
+    tham số đường cong. Trình duyệt dùng khóa này để TỰ KÝ giao dịch rồi broadcast
+    qua /api/tx/submit — giống ví non-custodial (MetaMask). KHÔNG có endpoint ký hộ:
+    chuyển tiền bình thường và tấn công đều đi qua đúng một con đường /api/tx/submit."""
     u = current_user()
     if not u:
-        return jsonify({"ok": False, "error": "unauthorized"}), 401
-    d = request.get_json(force=True)
-    try:
-        amount = int(d.get("amount", 0))
-    except (TypeError, ValueError):
-        return jsonify({"ok": False, "message": "Số tiền không hợp lệ"})
-    ok, msg = BANK.transfer(u["user"], d.get("to"), amount)
-    return jsonify({"ok": ok, "message": msg, "account": BANK.account(u["user"])})
+        return jsonify({"error": "unauthorized"}), 401
+    return jsonify(BANK.wallet(u["user"]))
 
 
 @app.route("/api/admin/users")
@@ -100,40 +141,9 @@ def api_admin_users():
     return jsonify({"accounts": BANK.all_accounts()})
 
 
-@app.route("/api/enterprise/pubkey")
-def api_enterprise_pubkey():
-    return jsonify(BANK.vault.enterprise_pubinfo())
-
-
 # --------------------------------------------------------------------------
-#  Bảng điều khiển tấn công
+#  Tiện ích demo
 # --------------------------------------------------------------------------
-@app.route("/attacker")
-def attacker_page():
-    return render_template("attacker.html")
-
-
-@app.route("/attack/nonce_reuse", methods=["POST"])
-def atk_nonce_reuse():
-    return jsonify(attacks.attack_nonce_reuse(BANK))
-
-
-@app.route("/attack/psychic", methods=["POST"])
-def atk_psychic():
-    return jsonify(attacks.attack_psychic(BANK))
-
-
-@app.route("/attack/pohlig", methods=["POST"])
-def atk_pohlig():
-    return jsonify(attacks.attack_pohlig(BANK))
-
-
-@app.route("/api/state")
-def api_state():
-    """Trạng thái số dư mọi tài khoản — để bảng tấn công vẽ before/after."""
-    return jsonify({"accounts": BANK.all_accounts(), "currency": CURRENCY})
-
-
 @app.route("/api/reset", methods=["POST"])
 def api_reset():
     global BANK
@@ -143,12 +153,10 @@ def api_reset():
 
 @app.route("/reset")
 def reset_demo():
-    """Khôi phục toàn bộ số dư & khóa về ban đầu (tiện demo, không cần restart).
-    Có thể gõ thẳng http://127.0.0.1:5000/reset trên trình duyệt."""
     global BANK
     BANK = Bank()
     resp = make_response(redirect("/login"))
-    resp.delete_cookie("session_token")   # token cũ hết hiệu lực sau khi reset
+    resp.delete_cookie("session_token")
     return resp
 
 

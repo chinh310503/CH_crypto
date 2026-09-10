@@ -6,16 +6,15 @@
   <title>CryptoBank — Tài khoản</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
-<body class="bank">
+<body>
   <div class="topbar">
-    <div class="brand">🏦 CryptoBank <small>Internet Banking</small></div>
-    <div class="who">
-      <span>👤 <b>{{ user.user }}</b></span>
-      <span class="badge {{ user.role }}">{{ user.role }}</span>
-      <a href="/attacker" style="color:#ff9a9a;text-decoration:none;font-size:13px">⚠ Attacker</a>
-      <a href="/reset" style="color:#ffd27a;text-decoration:none;font-size:13px"
-         onclick="return confirm('Khôi phục toàn bộ số dư về ban đầu?')">↺ Reset demo</a>
-      <a href="/logout" style="color:#cdd6e4;text-decoration:none;font-size:13px">Đăng xuất</a>
+    <div class="brand">CryptoBank</div>
+    <div class="nav">
+      <span>{{ user.user }} <span class="badge {{ user.role }}">{{ user.role }}</span></span>
+      <a href="/monitor">Monitor</a>
+      <a href="/explorer">Explorer</a>
+      <a href="/reset" onclick="return confirm('Khôi phục toàn bộ số dư về ban đầu?')">Reset</a>
+      <a href="/logout">Đăng xuất</a>
     </div>
   </div>
 
@@ -25,7 +24,6 @@
         <h2>Số dư khả dụng</h2>
         <div class="balance" id="balance">…<small>{{ currency }}</small></div>
       </div>
-
       <div class="card">
         <h2>Chuyển tiền</h2>
         <form id="xferForm">
@@ -36,24 +34,28 @@
           </datalist>
           <label>Số tiền ({{ currency }})</label>
           <input id="amount" type="number" min="1" required>
-          <button type="submit" style="width:100%">Chuyển</button>
+          <button type="submit" style="width:100%">Ký &amp; Gửi</button>
         </form>
         <div id="xferMsg"></div>
+        <p class="muted" style="font-size:12px;margin-top:12px">
+          🔑 Giao dịch được <b>ký ECDSA ngay trong trình duyệt</b> bằng khóa ví, rồi
+          broadcast qua <code>/api/tx/submit</code> — đúng một con đường với mọi giao dịch khác.
+        </p>
       </div>
     </div>
 
     {% if user.role == 'admin' %}
-    <div class="card" style="margin-top:20px">
-      <h2>Bảng quản trị — toàn bộ tài khoản</h2>
+    <div class="card">
+      <h2>Quản trị — toàn bộ tài khoản</h2>
       <button class="ghost" id="loadAdmin">Tải danh sách</button>
       <div id="adminBox" style="margin-top:12px"></div>
     </div>
     {% endif %}
 
-    <div class="card" style="margin-top:20px">
-      <h2>Lịch sử giao dịch gần đây</h2>
+    <div class="card">
+      <h2>Giao dịch gần đây</h2>
       <table>
-        <thead><tr><th>#</th><th>Từ</th><th>Đến</th><th>Số tiền</th></tr></thead>
+        <thead><tr><th>#</th><th>Từ</th><th>Đến</th><th class="num">Số tiền</th></tr></thead>
         <tbody id="hist"></tbody>
       </table>
     </div>
@@ -61,28 +63,96 @@
 
   <script>
     const CUR = "{{ currency }}";
+    const fmt = n => Number(n).toLocaleString('vi-VN');
+
+    // ===================== ECDSA secp256k1 trong trình duyệt =====================
+    const P  = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2Fn;
+    const N  = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141n;
+    const G  = { x: 0x79BE667EF9DCBBAC55A06295CE870B07029BFCDB2DCE28D959F2815B16F81798n,
+                 y: 0x483ADA7726A3C4655DA4FBFC0E1108A8FD17B448A68554199C47D08FFB10D4B8n };
+    const mod = (a, m) => ((a % m) + m) % m;
+    function inv(a, m) {                       // nghịch đảo modulo (Euclid mở rộng)
+      a = mod(a, m); let [or_, r] = [a, m], [os, s] = [1n, 0n];
+      while (r) { const q = or_ / r; [or_, r] = [r, or_ - q * r]; [os, s] = [s, os - q * s]; }
+      return mod(os, m);
+    }
+    function add(Pt, Qt) {                      // cộng điểm (null = điểm vô cực)
+      if (!Pt) return Qt; if (!Qt) return Pt;
+      if (Pt.x === Qt.x && mod(Pt.y + Qt.y, P) === 0n) return null;
+      let m;
+      if (Pt.x === Qt.x && Pt.y === Qt.y) m = mod(3n * Pt.x * Pt.x * inv(2n * Pt.y, P), P);
+      else m = mod((Qt.y - Pt.y) * inv(mod(Qt.x - Pt.x, P), P), P);
+      const x3 = mod(m * m - Pt.x - Qt.x, P);
+      return { x: x3, y: mod(m * (Pt.x - x3) - Pt.y, P) };
+    }
+    function mul(k, Pt) {                        // nhân vô hướng (double-and-add)
+      let R = null, A = Pt; k = mod(k, N);
+      while (k > 0n) { if (k & 1n) R = add(R, A); A = add(A, A); k >>= 1n; }
+      return R;
+    }
+    async function hashInt(str) {               // z = SHA-256(str) như _hash_to_int
+      const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+      let h = '0x'; for (const b of new Uint8Array(buf)) h += b.toString(16).padStart(2, '0');
+      return BigInt(h);
+    }
+    function randScalar() {
+      const b = new Uint8Array(32); crypto.getRandomValues(b);
+      let h = '0x'; for (const x of b) h += x.toString(16).padStart(2, '0');
+      return mod(BigInt(h), N - 1n) + 1n;
+    }
+    // "ví lỗi": hồ nonce nhỏ (pool 2) → dùng lại nonce giữa các giao dịch
+    let POOL = null, IDX = 0;
+    function brokenNonce() {
+      if (!POOL) POOL = [randScalar(), randScalar()];
+      return POOL[(IDX++) % POOL.length];
+    }
+    async function signTx(d, msg) {
+      const z = mod(await hashInt(msg), N);
+      while (true) {
+        const k = brokenNonce();
+        const R = mul(k, G); const r = mod(R.x, N); if (r === 0n) continue;
+        const s = mod(inv(k, N) * (z + r * d), N); if (s === 0n) continue;
+        return { r, s };
+      }
+    }
+    // chuẩn hóa GIỐNG HỆT bank.tx_bytes (khóa sắp xếp: amount, from, id, to)
+    const txBytes = tx => `{"amount":${tx.amount},"from":"${tx.from}","id":${tx.id},"to":"${tx.to}"}`;
+
+    // ===================== Ứng dụng =====================
+    let WALLET = null, txCounter = 0;
+    async function loadWallet() {
+      const r = await fetch('/api/wallet');
+      if (r.status === 401) { window.location = '/login'; return; }
+      WALLET = await r.json();
+    }
     async function loadAccount() {
       const r = await fetch('/api/account');
       if (r.status === 401) { window.location = '/login'; return; }
       const a = await r.json();
-      document.getElementById('balance').innerHTML =
-        a.balance.toLocaleString('vi-VN') + '<small>' + CUR + '</small>';
+      document.getElementById('balance').innerHTML = fmt(a.balance) + '<small>' + CUR + '</small>';
       document.getElementById('hist').innerHTML = a.history.slice().reverse().map(t =>
-        `<tr><td>${t.id}</td><td>${t.from}</td><td>${t.to}</td><td>${t.amount.toLocaleString('vi-VN')} ${CUR}</td></tr>`
-      ).join('') || '<tr><td colspan="4" style="color:#6b7688">Chưa có giao dịch</td></tr>';
+        `<tr><td>${t.id}</td><td>${t.from}</td><td>${t.to}</td><td class="num">${fmt(t.amount)}</td></tr>`
+      ).join('') || '<tr><td colspan="4" class="muted">Chưa có giao dịch</td></tr>';
     }
     document.getElementById('xferForm').onsubmit = async (e) => {
       e.preventDefault();
       const box = document.getElementById('xferMsg');
-      const r = await fetch('/api/transfer', {
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ to: document.getElementById('to').value,
-                               amount: document.getElementById('amount').value })
-      });
-      const d = await r.json();
-      box.className = 'msg ' + (d.ok ? 'ok' : 'err');
-      box.textContent = d.message;
-      if (d.ok) { loadAccount(); document.getElementById('xferForm').reset(); }
+      if (!WALLET) { box.className = 'msg err'; box.textContent = 'Ví chưa nạp xong'; return; }
+      box.className = 'msg'; box.textContent = 'Đang ký giao dịch trong trình duyệt…';
+      const tx = {
+        id: Date.now() * 1000 + (txCounter++ % 1000),
+        from: WALLET.user,
+        to: document.getElementById('to').value,
+        amount: parseInt(document.getElementById('amount').value, 10),
+      };
+      const { r, s } = await signTx(BigInt(WALLET.d), txBytes(tx));
+      const res = await (await fetch('/api/tx/submit', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...tx, r: r.toString(), s: s.toString() })
+      })).json();
+      box.className = 'msg ' + (res.ok ? 'ok' : 'err');
+      box.textContent = res.message;
+      if (res.ok) { loadAccount(); document.getElementById('xferForm').reset(); }
     };
     const adminBtn = document.getElementById('loadAdmin');
     if (adminBtn) adminBtn.onclick = async () => {
@@ -90,10 +160,11 @@
       const box = document.getElementById('adminBox');
       if (r.status !== 200) { box.innerHTML = '<div class="msg err">Bị từ chối</div>'; return; }
       const d = await r.json();
-      box.innerHTML = '<table><thead><tr><th>Tài khoản</th><th>Vai trò</th><th>Số dư</th></tr></thead><tbody>' +
-        d.accounts.map(a => `<tr><td>${a.user}</td><td>${a.role}</td><td>${a.balance.toLocaleString('vi-VN')} ${CUR}</td></tr>`).join('') +
+      box.innerHTML = '<table><thead><tr><th>Tài khoản</th><th>Vai trò</th><th class="num">Số dư</th></tr></thead><tbody>' +
+        d.accounts.map(a => `<tr><td>${a.user}</td><td>${a.role}</td><td class="num">${fmt(a.balance)}</td></tr>`).join('') +
         '</tbody></table>';
     };
+    loadWallet();
     loadAccount();
   </script>
 </body>

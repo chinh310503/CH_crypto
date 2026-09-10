@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CryptoBank — Explorer</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <div class="topbar">
+    <div class="brand">CryptoBank · Explorer</div>
+    <div class="nav">
+      <a href="/dashboard">Ngân hàng</a>
+      <a href="/monitor">Monitor</a>
+      <a href="/reset">Reset</a>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <div class="card">
+      <h2>Danh bạ khóa công khai (GET /api/accounts)</h2>
+      <p class="muted" style="margin-top:-6px">Mỗi tài khoản có khóa công khai ECDSA. Tài khoản <code>megacorp</code> dùng đường cong riêng.</p>
+      <table>
+        <thead><tr><th>Tài khoản</th><th>Đường cong</th><th>Khóa công khai (x)</th></tr></thead>
+        <tbody id="accs"></tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h2>Sổ cái giao dịch (GET /api/transactions)</h2>
+      <p class="muted" style="margin-top:-6px">Mỗi giao dịch kèm chữ ký ECDSA (r, s) của người gửi — công khai như blockchain.</p>
+      <table>
+        <thead><tr><th>#</th><th>Từ</th><th>Đến</th><th class="num">Số tiền</th><th>r</th><th>s</th></tr></thead>
+        <tbody id="txs"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    const short = s => s && s.length > 14 ? s.slice(0, 10) + '…' + s.slice(-4) : s;
+    (async () => {
+      const accs = await (await fetch('/api/accounts')).json();
+      document.getElementById('accs').innerHTML = accs.map(a =>
+        `<tr><td>${a.user}</td><td>${a.curve.name}</td><td class="mono">${short(a.pub.x)}</td></tr>`
+      ).join('');
+      const txs = await (await fetch('/api/transactions')).json();
+      document.getElementById('txs').innerHTML = txs.slice().reverse().map(t =>
+        `<tr><td>${t.id}</td><td>${t.from}</td><td>${t.to}</td><td class="num">${Number(t.amount).toLocaleString('vi-VN')}</td>`
+        + `<td class="mono">${short(t.r)}</td><td class="mono">${short(t.s)}</td></tr>`
+      ).join('');
+    })();
+  </script>
+</body>
+</html>

@@ -3,48 +3,51 @@
 **Nhóm C — Đường cong/tham số yếu** · Lý thuyết: [docs/03-tan-cong-toan-hoc.md, Phần I §3](../../docs/03-tan-cong-toan-hoc.md)
 
 ## Kịch bản
-Một hệ thống chọn nhầm đường cong mà **bậc `n` của điểm sinh là số "trơn"
-(smooth)** — chỉ gồm các thừa số nguyên tố nhỏ. Khi đó bài toán ECDLP `Q = d·G`
-bị "chẻ nhỏ" theo từng thừa số rồi ghép lại bằng **Định lý Số dư Trung Hoa
-(CRT)**, khiến việc tìm khóa bí mật `d` trở nên dễ dàng.
+Một hệ thống dùng đường cong **trông rất "thật"** — trường nguyên tố **~256 bit**,
+bậc nhóm cũng **~256 bit**, nhìn không khác gì secp256k1 nên tưởng an toàn. Nhưng
+**bậc nhóm là số TRƠN**: thừa số nguyên tố lớn nhất chỉ **~2³⁴**. Kẻ tấn công phân
+tích thừa số bậc nhóm rồi giải ECDLP bằng Pohlig–Hellman → khôi phục khóa bí mật.
 
-## Cơ chế
-Nếu `n = ∏ pᵢ^eᵢ` thì (theo Pohlig–Hellman):
-
-1. Với mỗi thừa số `pᵢ^eᵢ`, chiếu bài toán về **nhóm con bậc nhỏ** và giải
-   `d mod pᵢ^eᵢ` bằng **Baby-step Giant-step** (với lũy thừa nguyên tố thì giải
-   theo từng "chữ số" cơ số `pᵢ`).
-2. **Ghép CRT** các `d mod pᵢ^eᵢ` để thu `d mod n`.
-
-Chi phí giảm từ `~√n` (Pollard rho toàn cục) xuống `~Σ eᵢ·√pᵢ`.
+> Đây là cạm bẫy thực tế: người ta kiểm tra kích thước `p` và `n` (thấy 256-bit →
+> yên tâm) nhưng **quên kiểm tra `n` có phải số nguyên tố / có thừa số lớn không**.
 
 ## Đường cong dùng trong demo
-`ecc_core/toy_curve.py` (sinh sẵn bằng `tools/gen_smooth_curve.py`):
+`ecc_core/weak_curve.py` (sinh bằng `tools/gen_weak_curve.py`):
 
 ```
-y² = x³ + 1  (mod 1000003)
-bậc điểm sinh n = 499002 = 2 · 3 · 7 · 109²
+E: y² = x³ + x  trên F_p,  p ≡ 3 (mod 4),  p ~ 257 bit
+→ supersingular ⇒ #E(F_p) = p + 1  (không cần thuật toán đếm điểm Schoof)
+p + 1 = 2² · 3 · (nhiều nguyên tố nhỏ < 500) · q,  với q ~ 2³⁴ là thừa số lớn nhất
 ```
 
-Order này có **4 thừa số phân biệt** và một **lũy thừa nguyên tố** (109²) để minh
-họa đầy đủ cả bước "chữ số hóa" lẫn CRT. Muốn sinh đường cong khác:
+Vì `#E = p+1` được chọn TRƠN, thừa số lớn nhất chỉ ~2³⁴ → Pohlig–Hellman + BSGS phá
+được ECDLP chỉ với ~2¹⁷ phép toán (thay vì √n ≈ 2¹²⁷).
 
+Muốn sinh đường cong khác:
 ```bash
-python ../tools/gen_smooth_curve.py
+python ../tools/gen_weak_curve.py
 ```
+
+## Cơ chế
+Nếu `n = ∏ pᵢ^eᵢ` thì (Pohlig–Hellman):
+1. Với mỗi `pᵢ^eᵢ`, chiếu về **nhóm con bậc nhỏ**, giải `d mod pᵢ^eᵢ` bằng
+   **Baby-step Giant-step** (lũy thừa nguyên tố thì giải theo từng "chữ số").
+2. **Ghép CRT** các `d mod pᵢ^eᵢ` để thu `d`.
+
+Chi phí giảm từ `~√n ≈ 2¹²⁷` xuống `~√q ≈ 2¹⁷`.
 
 ## Chạy
 ```bash
 python attack.py
 ```
+Mất **vài giây** (BSGS trên nhóm con bậc `q ~ 2³⁴`).
 
 ## Kết quả mong đợi
-- Bảng `d mod pᵢ^eᵢ` cho từng thừa số, rồi **ghép CRT** ra đúng `d`.
-- Đối chiếu chi phí: `√n ≈ 706` bước (toàn cục) so với `≈ 29` bước (Pohlig–Hellman).
-
-> **Ý nghĩa:** với đường cong 256-bit có `n` **nguyên tố**, `√n ≈ 2¹²⁸` là bất khả
-> thi. Nhưng nếu `n` **trơn**, tấn công chỉ tốn `~√(thừa số lớn nhất)` → sụp đổ.
+- Phân tích bậc nhóm 256-bit ra 23 thừa số, lớn nhất `q ~ 2³⁴`.
+- Khôi phục đúng khóa bí mật `d`.
+- Đối chiếu chi phí: `2¹²⁷` (nếu bậc nguyên tố) so với `~131.000 bước` (thực tế).
 
 ## Phòng chống
-Chọn đường cong chuẩn có **bậc `n` nguyên tố** (hoặc nguyên tố lớn × cofactor
-nhỏ). Xem [docs/03-tan-cong-toan-hoc.md, Phần II §4](../../docs/03-tan-cong-toan-hoc.md).
+Chọn đường cong chuẩn có **bậc `n` nguyên tố** (hoặc nguyên tố lớn × cofactor nhỏ),
+và **tránh đường cong supersingular** (còn dính cả MOV attack). Xem
+[docs/03-tan-cong-toan-hoc.md, Phần II §4](../../docs/03-tan-cong-toan-hoc.md).

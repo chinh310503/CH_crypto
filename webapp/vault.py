@@ -1,22 +1,19 @@
-"""Két mật mã của CryptoBank — CỐ TÌNH cài cắm 3 lỗ hổng ECDSA để demo.
+"""Mật mã của CryptoBank — TOÀN BỘ dùng ECDSA. Cố tình cài 3 lỗ hổng:
 
-    (1) Nonce reuse    : bộ sinh ngẫu nhiên hỏng (chu kỳ cực ngắn) khi ký giao dịch
-                         → nonce lặp lại → lộ khóa ký master.
-    (2) Psychic sigs   : verify_token dùng verify_insecure (bỏ kiểm tra r,s∈[1,n-1])
-                         → chấp nhận chữ ký rỗng (0,0).
-    (3) Đường cong yếu : khóa "enterprise" đặt trên đường cong bậc TRƠN
-                         → Pohlig–Hellman khôi phục khóa riêng.
+ (1) Nonce reuse    : ví mỗi người dùng có RNG hỏng (hồ nonce nhỏ) khi KÝ GIAO DỊCH
+                      → hai giao dịch cùng người gửi lặp nonce → lộ khóa riêng.
+ (2) Psychic sigs   : verify_token bỏ kiểm tra r,s∈[1,n-1] → chấp nhận chữ ký (0,0).
+ (3) Đường cong yếu : tài khoản enterprise dùng đường cong có bậc điểm sinh quá nhỏ
+                      (~2^37) → Pollard's rho khôi phục khóa riêng từ khóa công khai.
 
-Các khóa bí mật (d_bank, d_token, d_ent) KHÔNG bao giờ được lộ ra ngoài; mọi tấn
-công chỉ dùng dữ liệu công khai.
+Mọi khóa bí mật KHÔNG bao giờ lộ ra ngoài; tấn công chỉ dùng dữ liệu công khai
+(sổ cái chữ ký, danh bạ khóa công khai, tham số đường cong).
 """
 import base64
-import hashlib
 import json
 import secrets
 
-from ecc_bridge import (SECP256K1, sign, verify, verify_insecure,
-                        load_toy_smooth)
+from ecc_core import SECP256K1, sign, verify, verify_insecure
 
 
 def b64u(raw: bytes) -> str:
@@ -28,13 +25,10 @@ def ub64u(s: str) -> bytes:
 
 
 class BrokenRNG:
-    """PRNG hỏng: chỉ có một 'hồ' nonce nhỏ và lặp vòng → nonce trùng lặp.
+    """RNG ví hỏng: chỉ có một 'hồ' nonce nhỏ, lặp vòng → nonce trùng lặp giữa các
+    giao dịch của cùng một ví (mô phỏng sự cố ví Bitcoin trên Android 2013)."""
 
-    Mô phỏng đúng bản chất sự cố ví Bitcoin trên Android 2013 (SecureRandom cạn
-    entropy) và Sony PS3 2010 (nonce tĩnh).
-    """
-
-    def __init__(self, n: int, pool_size: int = 3):
+    def __init__(self, n: int, pool_size: int = 2):
         self.pool = [secrets.randbelow(n - 1) + 1 for _ in range(pool_size)]
         self.i = 0
 
@@ -44,35 +38,40 @@ class BrokenRNG:
         return k
 
 
+# --------------------------------------------------------------------------
+# Ký / xác minh GIAO DỊCH bằng ECDSA (khóa riêng của người gửi)
+# --------------------------------------------------------------------------
+def sign_tx(curve, d: int, tx_bytes: bytes, rng: BrokenRNG):
+    """Ký giao dịch với nonce lấy từ RNG (có thể hỏng)."""
+    for _ in range(8):
+        k = rng.next()
+        try:
+            r, s, _ = sign(curve, d, tx_bytes, k=k)
+            return r, s
+        except ValueError:
+            continue          # k xấu (r=0/s=0) — cực hiếm; thử nonce kế tiếp
+    raise RuntimeError("không ký được giao dịch")
+
+
+def verify_tx(curve, Q, tx_bytes: bytes, r: int, s: int) -> bool:
+    """Xác minh ĐÚNG CHUẨN chữ ký giao dịch (ECDSA)."""
+    return verify(curve, Q, tx_bytes, r, s)
+
+
+def new_keypair(curve):
+    d = secrets.randbelow(curve.n - 1) + 1
+    return d, curve.mul(d, curve.G)
+
+
+# --------------------------------------------------------------------------
+# Token phiên đăng nhập — ký bằng khóa MÁY CHỦ, XÁC MINH có lỗ hổng psychic
+# --------------------------------------------------------------------------
 class Vault:
     def __init__(self):
         n = SECP256K1.n
-        # Khóa ký GIAO DỊCH (master) — bị ký bằng nonce yếu
-        self.d_bank = secrets.randbelow(n - 1) + 1
-        self.Q_bank = SECP256K1.mul(self.d_bank, SECP256K1.G)
-        # Khóa ký TOKEN phiên đăng nhập
         self.d_token = secrets.randbelow(n - 1) + 1
         self.Q_token = SECP256K1.mul(self.d_token, SECP256K1.G)
-        self._rng = BrokenRNG(n, pool_size=3)          # (1)
-        # (3) Khóa ENTERPRISE trên đường cong bậc trơn
-        self.toy = load_toy_smooth()
-        self.d_ent = secrets.randbelow(self.toy.n - 1) + 1
-        self.Q_ent = self.toy.mul(self.d_ent, self.toy.G)
 
-    # ------------------------------------------------------------------
-    # Giao dịch — ký bằng master key với NONCE YẾU  (lỗ hổng 1)
-    # ------------------------------------------------------------------
-    def sign_transaction(self, tx_bytes: bytes):
-        k = self._rng.next()
-        r, s, _ = sign(SECP256K1, self.d_bank, tx_bytes, k=k)
-        return r, s
-
-    def verify_transaction(self, tx_bytes: bytes, r: int, s: int) -> bool:
-        return verify(SECP256K1, self.Q_bank, tx_bytes, r, s)
-
-    # ------------------------------------------------------------------
-    # Token phiên — XÁC MINH có lỗ hổng psychic  (lỗ hổng 2)
-    # ------------------------------------------------------------------
     def issue_token(self, payload: dict) -> str:
         header = {"alg": "ES256", "typ": "JWT"}
         h = b64u(json.dumps(header, separators=(",", ":")).encode())
@@ -91,7 +90,7 @@ class Vault:
         return f"{h}.{p}".encode(), p, r, s
 
     def verify_token(self, token: str):
-        """LỖ HỔNG: dùng verify_insecure → chấp nhận (r,s)=(0,0)."""
+        """LỖ HỔNG (psychic): dùng verify_insecure → chấp nhận (r,s)=(0,0)."""
         try:
             msg, p, r, s = self._parse_token(token)
         except Exception:
@@ -101,7 +100,7 @@ class Vault:
         return None
 
     def verify_token_secure(self, token: str):
-        """Bản VÁ (đối chứng) — dùng verify đúng chuẩn, sẽ từ chối (0,0)."""
+        """Bản VÁ (đối chứng) — verify đúng chuẩn, từ chối (0,0)."""
         try:
             msg, p, r, s = self._parse_token(token)
         except Exception:
@@ -109,28 +108,3 @@ class Vault:
         if verify(SECP256K1, self.Q_token, msg, r, s):
             return json.loads(ub64u(p))
         return None
-
-    # ------------------------------------------------------------------
-    # Enterprise — đường cong bậc trơn  (lỗ hổng 3)
-    #
-    # Dùng chữ ký kiểu Schnorr (s·G = R + e·Q) vì nó hợp lệ với mọi bậc n,
-    # kể cả n hợp số như đường cong trơn này (ECDSA đòi hỏi n nguyên tố). Điểm
-    # yếu KHÔNG nằm ở sơ đồ ký mà ở chỗ n trơn → Pohlig–Hellman khôi phục được
-    # khóa riêng chỉ từ khóa công khai Q_ent và tham số đường cong.
-    # ------------------------------------------------------------------
-    def enterprise_pubinfo(self) -> dict:
-        t = self.toy
-        return {"a": t.a, "b": t.b, "p": t.p, "n": t.n,
-                "Gx": t.G.x, "Gy": t.G.y, "Qx": self.Q_ent.x, "Qy": self.Q_ent.y}
-
-    @staticmethod
-    def schnorr_challenge(curve, R, msg_bytes: bytes) -> int:
-        data = f"{R.x},{R.y}".encode() + b"|" + msg_bytes
-        return int.from_bytes(hashlib.sha256(data).digest(), "big") % curve.n
-
-    def verify_enterprise(self, msg_bytes: bytes, Rx: int, Ry: int, s: int) -> bool:
-        t = self.toy
-        R = t.point(Rx, Ry)
-        e = self.schnorr_challenge(t, R, msg_bytes)
-        # kiểm tra s·G == R + e·Q_ent
-        return t.mul(s, t.G) == t.add(R, t.mul(e, self.Q_ent))

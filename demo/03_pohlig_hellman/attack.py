@@ -1,37 +1,21 @@
 """DEMO 3 — TẤN CÔNG POHLIG–HELLMAN   [nhóm C — đường cong/tham số yếu]
 
-Kịch bản: một hệ thống chọn nhầm đường cong mà BẬC của điểm sinh (n) là một số
-"trơn" (smooth) — chỉ gồm các thừa số nguyên tố nhỏ. Khi đó bài toán ECDLP
-Q = d*G bị "chẻ nhỏ" theo từng thừa số nguyên tố rồi ghép lại bằng Định lý Số dư
-Trung Hoa (CRT), khiến việc tìm khóa bí mật d trở nên dễ dàng — thay vì tốn ~√n
-như trên đường cong tốt.
+Kịch bản: một hệ thống dùng đường cong TRÔNG rất "thật" — trường nguyên tố ~256 bit,
+bậc nhóm cũng ~256 bit — nên tưởng an toàn như secp256k1. Nhưng bậc nhóm lại là số
+TRƠN (thừa số nguyên tố lớn nhất chỉ ~2^34). Kẻ tấn công phân tích thừa số bậc nhóm,
+rồi "chẻ nhỏ" ECDLP theo từng thừa số và ghép bằng CRT — khôi phục khóa bí mật dễ
+dàng, thay vì tốn ~√n ≈ 2^128 như trên đường cong tốt.
 
 Cơ sở lý thuyết: docs/03-tan-cong-toan-hoc.md, Phần I §3
 Chạy:  python attack.py
 """
 import os
+import secrets
 import sys
 from math import isqrt
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from ecc_core import load_toy_smooth, inverse_mod
-from ecc_core import io
-import secrets
-
-
-# --------------------------------------------------------------------------
-# Các thuật toán phụ trợ
-# --------------------------------------------------------------------------
-def factorize(n: int) -> dict:
-    f, d = {}, 2
-    while d * d <= n:
-        while n % d == 0:
-            f[d] = f.get(d, 0) + 1
-            n //= d
-        d += 1 if d == 2 else 2
-    if n > 1:
-        f[n] = f.get(n, 0) + 1
-    return f
+from ecc_core import load_weak_curve, inverse_mod, factorize, io
 
 
 def _key(P):
@@ -42,22 +26,22 @@ def bsgs(curve, P, Q, order):
     """Baby-step Giant-step: tìm k ∈ [0, order) sao cho k*P = Q."""
     m = isqrt(order) + 1
     table, cur = {}, curve.O
-    for j in range(m):                     # baby steps: j*P
+    for j in range(m):                         # baby steps: j*P
         table.setdefault(_key(cur), j)
         cur = curve.add(cur, P)
-    neg_mP = -curve.mul(m, P)               # -m*P
+    neg_mP = -curve.mul(m, P)                   # -m*P
     gamma = Q
-    for i in range(m + 1):                  # giant steps: Q - i*m*P
+    for i in range(m + 1):                      # giant steps: Q - i*m*P
         hit = table.get(_key(gamma))
         if hit is not None:
             return (i * m + hit) % order
         gamma = curve.add(gamma, neg_mP)
-    raise ValueError("BSGS thất bại (P không sinh nhóm bậc `order`?)")
+    raise ValueError("BSGS thất bại")
 
 
 def solve_prime_power(curve, G, Q, n, p, e):
     """Tìm d mod p^e bằng phương pháp 'chữ số' theo cơ số p."""
-    g0 = curve.mul(n // p, G)               # phần tử bậc p
+    g0 = curve.mul(n // p, G)                   # phần tử bậc p
     x = 0
     for k in range(e):
         exp = n // (p ** (k + 1))
@@ -65,11 +49,10 @@ def solve_prime_power(curve, G, Q, n, p, e):
         tk = curve.mul(exp, diff)               # = a_k * g0
         ak = bsgs(curve, g0, tk, p)
         x += ak * (p ** k)
-    return x                                 # d mod p^e
+    return x                                     # d mod p^e
 
 
 def crt(residues, moduli):
-    """Ghép nghiệm bằng Định lý Số dư Trung Hoa."""
     N = 1
     for m in moduli:
         N *= m
@@ -80,56 +63,48 @@ def crt(residues, moduli):
     return x % N
 
 
-# --------------------------------------------------------------------------
 def main():
-    io.banner("DEMO 3 — TẤN CÔNG POHLIG–HELLMAN (đường cong bậc trơn)")
-    curve = load_toy_smooth()
+    io.banner("DEMO 3 — TẤN CÔNG POHLIG–HELLMAN (đường cong ~256 bit, bậc TRƠN)")
+    curve = load_weak_curve()
     G, n = curve.G, curve.n
 
     # ------------------------------------------------------------------ [1]
-    io.step(1, "SETUP — nạn nhân sinh khóa trên đường cong đồ chơi")
-    print(f"    {curve}")
+    io.step(1, "SETUP — nạn nhân sinh khóa trên đường cong 'enterprise'")
+    io.info("Trường F_p", f"p ~ {curve.p.bit_length()} bit ({io.short(curve.p)})")
+    io.info("Bậc nhóm n", f"~ {n.bit_length()} bit ({io.short(n)})")
     d = secrets.randbelow(n - 1) + 1
     Q = curve.mul(d, G)
-    io.info("Điểm sinh G", f"({G.x}, {G.y})")
-    io.info("Bậc của G: n", n)
-    io.info("Khóa bí mật d (giữ kín)", d)
-    io.info("Khóa công khai Q = d*G", f"({Q.x}, {Q.y})")
+    io.info("Khóa bí mật d (giữ kín)", io.short(d))
+    io.info("Khóa công khai Q = d*G", f"({io.short(Q.x)}, {io.short(Q.y)})")
 
     # ------------------------------------------------------------------ [2]
-    io.step(2, "FLAW — bậc n là số TRƠN (chỉ gồm thừa số nguyên tố nhỏ)")
+    io.step(2, "FLAW — phân tích thừa số bậc nhóm (điều gần như không ai kiểm tra)")
     factors = factorize(n)
-    io.info("Phân tích n", " × ".join(f"{p}^{e}" if e > 1 else f"{p}"
-                                       for p, e in factors.items()))
-    io.info("Thừa số nguyên tố lớn nhất", max(factors))
+    q = max(factors)
+    io.info("Số thừa số nguyên tố", len(factors))
+    io.info("Thừa số lớn nhất q", f"{q}  (~2^{q.bit_length() - 1})")
+    io.result(True, "Bậc nhóm 256-bit nhưng TRƠN → Pohlig–Hellman áp dụng được")
 
     # ------------------------------------------------------------------ [3]
-    io.step(3, "ATTACK — Pohlig–Hellman: giải ECDLP theo từng thừa số rồi CRT")
-    print(f"\n    {'Thừa số p^e':<14}{'d mod p^e':<14}{'(giải bằng BSGS trong nhóm bậc nhỏ)'}")
-    print("    " + "-" * 66)
+    io.step(3, "ATTACK — giải ECDLP theo từng thừa số (BSGS) rồi ghép CRT")
     residues, moduli = [], []
-    for p, e in factors.items():
+    for p, e in sorted(factors.items()):
         dm = solve_prime_power(curve, G, Q, n, p, e)
-        pe = p ** e
         residues.append(dm)
-        moduli.append(pe)
-        print(f"    {str(pe):<14}{str(dm):<14}d ≡ {dm} (mod {pe})")
-
+        moduli.append(p ** e)
+    io.info("Đã giải xong", f"{len(factors)} nhóm con (nhóm bậc q ~2^{q.bit_length()-1} tốn nhất)")
     d_rec = crt(residues, moduli)
-    print()
-    io.info("Ghép CRT → d", d_rec)
+    io.info("Ghép CRT → d", io.short(d_rec))
 
     # ------------------------------------------------------------------ [4]
     io.step(4, "PROOF — so khớp khóa và đối chiếu chi phí")
     ok = io.compare_keys(d_rec, d)
-
-    cost_global = isqrt(n)
     cost_ph = sum(e * (isqrt(p) + 1) for p, e in factors.items())
     print()
-    io.info("Chi phí ~ Pollard rho toàn cục", f"≈ √n ≈ {cost_global} bước")
-    io.info("Chi phí ~ Pohlig–Hellman", f"≈ Σ eᵢ·√pᵢ ≈ {cost_ph} bước")
-    print("\n    → Với đường cong 256-bit có n NGUYÊN TỐ, √n ≈ 2^128 là bất khả thi.")
-    print("      Nhưng khi n TRƠN, tấn công chỉ tốn ~√(thừa số lớn nhất) → sụp đổ hoàn toàn.")
+    io.info("Chi phí nếu n NGUYÊN TỐ (√n)", f"≈ 2^{n.bit_length() // 2}  (bất khả thi)")
+    io.info("Chi phí Pohlig–Hellman thực tế", f"≈ {cost_ph:,} bước".replace(",", "."))
+    print("\n    → Cùng một đường cong 256-bit: nếu bậc nhóm NGUYÊN TỐ thì an toàn tuyệt đối,")
+    print("      nhưng vì bậc nhóm TRƠN nên chỉ tốn ~√(thừa số lớn nhất) → sụp đổ hoàn toàn.")
 
     sys.exit(0 if ok else 1)
 

@@ -6,8 +6,8 @@ import os
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from ecc_core import (SECP256K1, load_toy_smooth, keygen, sign, verify,
-                      verify_insecure)
+from ecc_core import (SECP256K1, load_weak_curve, keygen, sign, verify,
+                      verify_insecure, factorize)
 
 
 def check(name, cond):
@@ -33,11 +33,14 @@ def main():
     check("verify AN TOÀN từ chối (0,0)", not verify(SECP256K1, Q, b"forge", 0, 0))
     check("verify CÓ LỖI chấp nhận (0,0)", verify_insecure(SECP256K1, Q, b"forge", 0, 0))
 
-    print("== toy-smooth ==")
-    T = load_toy_smooth()
+    print("== đường cong enterprise yếu (supersingular ~256 bit) ==")
+    T = load_weak_curve()
     check("G nằm trên đường cong", T.contains(T.G))
     check("n*G = O", T.mul(T.n, T.G).is_infinity())
-    check("(n//2)*G != O (n đúng là bậc)", not T.mul(T.n // 2, T.G).is_infinity())
+    q = max(factorize(T.n))
+    check(f"thừa số nguyên tố lớn nhất của bậc nhóm nhỏ (~2^{q.bit_length()-1})",
+          q.bit_length() <= 40)
+    check("(n//q)*G != O — G có bậc chia hết q", not T.mul(T.n // q, T.G).is_infinity())
 
     print("\nTất cả kiểm tra PASS ✔")
 

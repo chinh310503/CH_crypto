@@ -44,14 +44,15 @@ demo/
 ├── ecc_core/                 ← THƯ VIỆN LÕI (dùng chung cho cả 3 demo)
 │   ├── curve.py              # EllipticCurve, Point: cộng/nhân điểm, nghịch đảo mod
 │   ├── curves.py             # secp256k1 (đường cong thật)
-│   ├── toy_curve.py          # đường cong đồ chơi bậc trơn (sinh tự động)
+│   ├── weak_curve.py         # đường cong supersingular ~256 bit, bậc trơn (sinh tự động)
+│   ├── factor.py             # is_prime + factorize (trial + Miller-Rabin + Pollard rho)
 │   ├── ecdsa.py              # keygen, sign, verify, verify_insecure
 │   └── io.py                 # tiện ích in ấn (tự bật UTF-8)
 ├── 01_nonce_reuse/attack.py
 ├── 02_psychic_signatures/attack.py
 ├── 03_pohlig_hellman/attack.py
 ├── tools/
-│   ├── gen_smooth_curve.py   # sinh lại đường cong bậc trơn cho demo 3
+│   ├── gen_weak_curve.py     # sinh lại đường cong yếu (supersingular, bậc trơn) cho demo 3
 │   └── selftest.py           # kiểm tra nhanh ecc_core
 └── run_all.py
 ```
@@ -73,7 +74,8 @@ cong và ECDSA đều tái sử dụng từ `ecc_core`.
 ## Lưu ý
 
 - Mục đích **giáo dục**: đường cong secp256k1 là thật, nhưng khóa/nonce/thông điệp
-  đều do demo tự sinh; đường cong ở demo 3 là "đồ chơi" cỡ nhỏ để chạy tức thì.
+  đều do demo tự sinh; đường cong ở demo 3 là đường cong **supersingular ~256 bit**
+  cố tình có bậc nhóm trơn (demo 3 chạy mất vài giây do phải giải ECDLP).
 - Các hàm được viết ưu tiên **dễ đọc**, không phải mã production (ví dụ ký/xác
   minh không chống kênh bên). Với hệ thống thật, xem khuyến nghị ở
   [docs/06-phong-chong.md](../docs/06-phong-chong.md).

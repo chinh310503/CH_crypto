@@ -1,10 +1,19 @@
-"""Trạng thái & nghiệp vụ của CryptoBank (lưu trong bộ nhớ, đủ cho demo)."""
-import json
-import time
+"""Trạng thái & nghiệp vụ CryptoBank theo mô hình ví/sàn giao dịch.
 
-from vault import Vault
+- Mỗi tài khoản có cặp khóa ECDSA riêng (người dùng thường trên secp256k1; tài khoản
+  enterprise 'megacorp' trên đường cong yếu).
+- Chuyển tiền = giao dịch được KÝ ECDSA bằng khóa người gửi; server XÁC MINH chữ ký
+  với khóa công khai của người gửi rồi mới thực thi (qua /api/tx/submit).
+- Ví người dùng dùng RNG hỏng khi ký → nonce trùng lặp lộ trên sổ cái công khai.
+"""
+import json
+import random
+
+from ecc_core import SECP256K1, load_weak_curve
+from vault import Vault, BrokenRNG, sign_tx, verify_tx, new_keypair
 
 CURRENCY = "CBC"
+WEAK = load_weak_curve()
 
 
 def tx_bytes(tx: dict) -> bytes:
@@ -15,38 +24,107 @@ def tx_bytes(tx: dict) -> bytes:
     ).encode()
 
 
+def _curve_info(curve) -> dict:
+    """Mô tả tham số đường cong (số lớn để dạng chuỗi cho JSON/JS)."""
+    return {"name": curve.name, "a": curve.a, "b": curve.b,
+            "p": str(curve.p), "n": str(curve.n),
+            "Gx": str(curve.G.x), "Gy": str(curve.G.y)}
+
+
+_PEOPLE = [
+    ("nguyenvana", "Nguyễn Văn An"),   ("tranthib", "Trần Thị Bình"),
+    ("levanc", "Lê Văn Cường"),        ("phamthid", "Phạm Thị Dung"),
+    ("hoangvane", "Hoàng Văn Em"),     ("vothif", "Võ Thị Phượng"),
+    ("dangvang", "Đặng Văn Giang"),    ("buithih", "Bùi Thị Hoa"),
+    ("dovank", "Đỗ Văn Khoa"),         ("ngothil", "Ngô Thị Lan"),
+    ("duongvanm", "Dương Văn Minh"),   ("lythin", "Lý Thị Nga"),
+    ("phanvano", "Phan Văn Oanh"),     ("huynhthip", "Huỳnh Thị Phúc"),
+    ("truongvanq", "Trương Văn Quân"),
+]
+
+
 class Bank:
     def __init__(self):
         self.vault = Vault()
-        self.users = {
-            "alice":    {"password": "alice123", "role": "user",       "balance": 5000},
-            "bob":      {"password": "bob123",   "role": "user",       "balance": 1500},
-            "carol":    {"password": "carol123", "role": "user",       "balance": 3200},
-            "admin":    {"password": "S3cr3t!" + str(int(time.time())),
-                         "role": "admin", "balance": 100000},
-            "megacorp": {"password": None, "role": "enterprise", "balance": 5000000},
-        }
+        rnd = random.Random(20260908)
+        self.users = {}
+
+        def add(u, name, role, bal, curve, pw=None):
+            d, Q = new_keypair(curve)
+            self.users[u] = {
+                "name": name, "password": pw, "role": role, "balance": bal,
+                "curve": curve, "d": d, "Q": Q,
+                "rng": BrokenRNG(curve.n, pool_size=2),   # ví lỗi RNG
+                "email": f"{u}@cryptobank.vn",
+                "cccd": "".join(str(rnd.randint(0, 9)) for _ in range(12)),
+                "phone": "09" + "".join(str(rnd.randint(0, 9)) for _ in range(8)),
+            }
+
+        add("alice", "Nguyễn Alice", "user", 5000, SECP256K1, "alice123")
+        add("bob", "Trần Bob", "user", 1500, SECP256K1, "bob123")
+        add("carol", "Lê Carol", "user", 3200, SECP256K1, "carol123")
+        add("admin", "Quản Trị Viên", "admin", 100000, SECP256K1, "S3cr3t!" + str(rnd.randint(1000, 9999)))
+        add("megacorp", "Tập Đoàn MegaCorp", "enterprise", 5000000, WEAK)  # đường cong yếu
+        for u, name in _PEOPLE:
+            add(u, name, "user", rnd.randint(80, 400) * 100, SECP256K1)
+
         self.transactions = []
+        self.used_ids = set()
         self._next_id = 1
-        self._seed_history()
+        self._seed_history(rnd)
 
     # ------------------------------------------------------------------
-    def _record(self, frm, to, amount):
+    def _seed_history(self, rnd):
+        """Mỗi ví (trừ megacorp) gửi vài giao dịch nhỏ → sổ cái + nonce trùng."""
+        senders = [u for u in self.users if u != "megacorp"]
+        others = list(senders)
+        for u in senders:
+            for _ in range(3):                       # 3 giao dịch → chắc chắn lặp nonce
+                to = rnd.choice([x for x in others if x != u])
+                self._logged_in_transfer(u, to, rnd.randint(10, 90))
+
+    # ------------------------------------------------------------------
+    def _do_transfer(self, frm, to, amount):
+        self.users[frm]["balance"] -= amount
+        self.users[to]["balance"] += amount
+
+    def _append(self, tx, r, s):
+        rec = {"id": tx["id"], "from": tx["from"], "to": tx["to"],
+               "amount": tx["amount"], "r": r, "s": s}
+        self.transactions.append(rec)
+        self.used_ids.add(tx["id"])
+
+    def _logged_in_transfer(self, frm, to, amount):
+        """Tạo giao dịch, KÝ bằng khóa người gửi (RNG ví), rồi nộp như mọi giao dịch."""
+        acct = self.users[frm]
         tx = {"id": self._next_id, "from": frm, "to": to, "amount": amount}
         self._next_id += 1
-        r, s = self.vault.sign_transaction(tx_bytes(tx))
-        tx["r"], tx["s"] = r, s
-        self.transactions.append(tx)
-        return tx
+        r, s = sign_tx(acct["curve"], acct["d"], tx_bytes(tx), acct["rng"])
+        return self.submit_tx(tx, r, s)
 
-    def _seed_history(self):
-        # Lịch sử chữ ký mẫu — chính là bề mặt để lộ nonce trùng.
-        seeds = [("alice", "carol", 120), ("bob", "alice", 75),
-                 ("carol", "bob", 200), ("alice", "bob", 50),
-                 ("carol", "alice", 300), ("bob", "carol", 25),
-                 ("alice", "carol", 90), ("carol", "bob", 140)]
-        for frm, to, amt in seeds:
-            self._record(frm, to, amt)
+    # ---- API nghiệp vụ ----
+    def submit_tx(self, tx, r, s):
+        """Nộp một giao dịch đã ký (broadcast). Xác minh chữ ký ECDSA của NGƯỜI GỬI
+        với khóa công khai của họ, rồi thực thi. Đây là con đường DUY NHẤT để tiền
+        dịch chuyển — dùng chung bởi form chuyển tiền lẫn kẻ tấn công."""
+        frm, to = tx.get("from"), tx.get("to")
+        if frm not in self.users or to not in self.users:
+            return False, "Tài khoản không tồn tại"
+        if tx["id"] in self.used_ids:
+            return False, "Mã giao dịch đã dùng"
+        if tx["amount"] <= 0:
+            return False, "Số tiền không hợp lệ"
+        acct = self.users[frm]
+        if not verify_tx(acct["curve"], acct["Q"], tx_bytes(tx), r, s):
+            return False, "Chữ ký KHÔNG hợp lệ"
+        if acct["balance"] < tx["amount"]:
+            return False, "Số dư không đủ"
+        self._do_transfer(frm, to, tx["amount"])
+        self._append(tx, r, s)
+        return True, "Giao dịch thành công"
+
+    def next_id(self):
+        return self._next_id
 
     # ---- auth ----
     def authenticate(self, user, pw):
@@ -55,64 +133,49 @@ class Bank:
             return {"user": user, "role": u["role"]}
         return None
 
-    # ---- truy vấn ----
+    # ---- truy vấn công khai ----
     def public_transactions(self):
-        # r, s trả về dạng CHUỖI để tránh mất chính xác số lớn trong JavaScript.
-        return [{"id": t["id"], "from": t["from"], "to": t["to"],
-                 "amount": t["amount"], "r": str(t["r"]), "s": str(t["s"])}
-                for t in self.transactions]
+        return [{"id": t["id"], "from": t["from"], "to": t["to"], "amount": t["amount"],
+                 "r": str(t["r"]), "s": str(t["s"])} for t in self.transactions]
+
+    def account_keys(self):
+        """Danh bạ khóa công khai + tham số đường cong (bề mặt cho tấn công)."""
+        out = []
+        for k, v in self.users.items():
+            out.append({"user": k, "name": v["name"], "curve": _curve_info(v["curve"]),
+                        "pub": {"x": str(v["Q"].x), "y": str(v["Q"].y)}})
+        return out
+
+    def public_accounts(self):
+        return [{"user": k, "name": v["name"], "balance": v["balance"]}
+                for k, v in self.users.items()]
+
+    def all_accounts(self):
+        return [{"user": k, "name": v["name"], "role": v["role"], "balance": v["balance"],
+                 "email": v["email"], "cccd": v["cccd"], "phone": v["phone"]}
+                for k, v in self.users.items()]
 
     def account(self, user):
         u = self.users.get(user)
         if not u:
             return None
         hist = [t for t in self.transactions if t["from"] == user or t["to"] == user]
-        return {"user": user, "role": u["role"], "balance": u["balance"],
+        return {"user": user, "name": u["name"], "role": u["role"], "balance": u["balance"],
+                "pub": {"x": str(u["Q"].x), "y": str(u["Q"].y)},
                 "history": [{"id": t["id"], "from": t["from"], "to": t["to"],
-                             "amount": t["amount"]} for t in hist[-10:]]}
+                             "amount": t["amount"]} for t in hist[-12:]]}
 
-    def all_accounts(self):
-        return [{"user": k, "role": v["role"], "balance": v["balance"]}
-                for k, v in self.users.items()]
+    def wallet(self, user):
+        """Nạp 'ví' của người dùng vào trình duyệt: khóa riêng + tham số đường cong,
+        để trình duyệt TỰ KÝ giao dịch (giống ví non-custodial). Chỉ trả cho chính
+        chủ tài khoản (đã đăng nhập)."""
+        u = self.users.get(user)
+        if not u:
+            return None
+        return {"user": user, "d": str(u["d"]), "curve": _curve_info(u["curve"]),
+                "pub": {"x": str(u["Q"].x), "y": str(u["Q"].y)},
+                "next_id": self._next_id}
 
-    # ---- nghiệp vụ ----
-    def transfer(self, frm, to, amount):
-        if frm not in self.users or to not in self.users:
-            return False, "Tài khoản không tồn tại"
-        if amount <= 0:
-            return False, "Số tiền không hợp lệ"
-        if self.users[frm]["balance"] < amount:
-            return False, "Số dư không đủ"
-        self.users[frm]["balance"] -= amount
-        self.users[to]["balance"] += amount
-        self._record(frm, to, amount)
-        return True, "Chuyển tiền thành công"
-
-    def execute_clearing(self, tx, r, s):
-        """Thực hiện giao dịch được KÝ bởi ngân hàng, KHÔNG cần đăng nhập.
-
-        Chỉ chấp nhận nếu chữ ký master hợp lệ — bình thường chỉ ngân hàng ký
-        được. Đây là điểm khiến việc lộ khóa master trở thành thảm họa.
-        """
-        if not self.vault.verify_transaction(tx_bytes(tx), r, s):
-            return False, "Chữ ký ngân hàng KHÔNG hợp lệ"
-        frm, to, amount = tx["from"], tx["to"], tx["amount"]
-        if self.users[frm]["balance"] < amount:
-            return False, "Số dư không đủ"
-        self.users[frm]["balance"] -= amount
-        self.users[to]["balance"] += amount
-        rec = dict(tx)
-        rec["r"], rec["s"] = r, s
-        self.transactions.append(rec)
-        return True, "Đã thanh toán"
-
-    def enterprise_withdraw(self, to, amount, Rx, Ry, s):
-        """Rút tiền tài khoản enterprise — cần chữ ký Schnorr khóa enterprise."""
-        msg = f"WITHDRAW:{amount}:TO:{to}".encode()
-        if not self.vault.verify_enterprise(msg, Rx, Ry, s):
-            return False, "Chữ ký enterprise KHÔNG hợp lệ"
-        if self.users["megacorp"]["balance"] < amount:
-            return False, "Số dư không đủ"
-        self.users["megacorp"]["balance"] -= amount
-        self.users[to]["balance"] += amount
-        return True, "Đã rút tiền enterprise"
+    def totals(self):
+        return {"assets": sum(v["balance"] for v in self.users.values()),
+                "transactions": len(self.transactions)}
