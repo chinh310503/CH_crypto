@@ -1,7 +1,7 @@
 """Trạng thái & nghiệp vụ CryptoBank theo mô hình ví/sàn giao dịch.
 
 - Mỗi tài khoản có cặp khóa ECDSA riêng (người dùng thường trên secp256k1; tài khoản
-  enterprise 'megacorp' trên đường cong yếu).
+  enterprise 'omnicorp' trên đường cong yếu).
 - Chuyển tiền = giao dịch được KÝ ECDSA bằng khóa người gửi; server XÁC MINH chữ ký
   với khóa công khai của người gửi rồi mới thực thi (qua /api/tx/submit).
 - Ví người dùng dùng RNG hỏng khi ký → nonce trùng lặp lộ trên sổ cái công khai.
@@ -9,7 +9,7 @@
 import json
 import random
 
-from ecc_core import SECP256K1, load_weak_curve
+from ecc_core import STANDARD_CURVES, load_weak_curve
 from vault import Vault, BrokenRNG, sign_tx, verify_tx, new_keypair
 
 CURRENCY = "CBC"
@@ -25,8 +25,10 @@ def tx_bytes(tx: dict) -> bytes:
 
 
 def _curve_info(curve) -> dict:
-    """Mô tả tham số đường cong (số lớn để dạng chuỗi cho JSON/JS)."""
-    return {"name": curve.name, "a": curve.a, "b": curve.b,
+    """Mô tả tham số đường cong. TẤT CẢ số để dạng chuỗi: a, b của họ NIST là số
+    ~256 bit (a ≡ -3 mod p), nếu để dạng số JSON sẽ mất chính xác khi JavaScript
+    parse (double) → hệ số a sai → ký trong trình duyệt hỏng."""
+    return {"name": curve.name, "a": str(curve.a), "b": str(curve.b),
             "p": str(curve.p), "n": str(curve.n),
             "Gx": str(curve.G.x), "Gy": str(curve.G.y)}
 
@@ -60,13 +62,16 @@ class Bank:
                 "phone": "09" + "".join(str(rnd.randint(0, 9)) for _ in range(8)),
             }
 
-        add("alice", "Nguyễn Alice", "user", 5000, SECP256K1, "alice123")
-        add("bob", "Trần Bob", "user", 1500, SECP256K1, "bob123")
-        add("carol", "Lê Carol", "user", 3200, SECP256K1, "carol123")
-        add("admin", "Quản Trị Viên", "admin", 100000, SECP256K1, "S3cr3t!" + str(rnd.randint(1000, 9999)))
-        add("megacorp", "Tập Đoàn MegaCorp", "enterprise", 5000000, WEAK)  # đường cong yếu
+        # Mỗi tài khoản thường được gán NGẪU NHIÊN một đường cong chuẩn (secp256k1
+        # hoặc họ NIST P-192/224/256) → danh bạ khóa công khai trông đa dạng như thật.
+        pick = lambda: rnd.choice(STANDARD_CURVES)
+        add("alice", "Nguyễn Alice", "user", 5000, pick(), "alice123")
+        add("bob", "Trần Bob", "user", 1500, pick(), "bob123")
+        add("carol", "Lê Carol", "user", 3200, pick(), "carol123")
+        add("admin", "Quản Trị Viên", "admin", 100000, pick(), "S3cr3t!" + str(rnd.randint(1000, 9999)))
+        add("omnicorp", "Tập Đoàn OmniCorp", "enterprise", 5000000, WEAK)  # đường cong yếu
         for u, name in _PEOPLE:
-            add(u, name, "user", rnd.randint(80, 400) * 100, SECP256K1)
+            add(u, name, "user", rnd.randint(80, 400) * 100, pick())
 
         self.transactions = []
         self.used_ids = set()
@@ -75,8 +80,8 @@ class Bank:
 
     # ------------------------------------------------------------------
     def _seed_history(self, rnd):
-        """Mỗi ví (trừ megacorp) gửi vài giao dịch nhỏ → sổ cái + nonce trùng."""
-        senders = [u for u in self.users if u != "megacorp"]
+        """Mỗi ví (trừ omnicorp) gửi vài giao dịch nhỏ → sổ cái + nonce trùng."""
+        senders = [u for u in self.users if u != "omnicorp"]
         others = list(senders)
         for u in senders:
             for _ in range(3):                       # 3 giao dịch → chắc chắn lặp nonce
@@ -93,6 +98,9 @@ class Bank:
                "amount": tx["amount"], "r": r, "s": s}
         self.transactions.append(rec)
         self.used_ids.add(tx["id"])
+        # Bộ đếm số thứ tự luôn tiến qua id vừa dùng → mọi giao dịch (seed, web, tấn
+        # công) đánh số tuần tự chung một dãy.
+        self._next_id = max(self._next_id, tx["id"] + 1)
 
     def _logged_in_transfer(self, frm, to, amount):
         """Tạo giao dịch, KÝ bằng khóa người gửi (RNG ví), rồi nộp như mọi giao dịch."""
@@ -161,7 +169,7 @@ class Bank:
             return None
         hist = [t for t in self.transactions if t["from"] == user or t["to"] == user]
         return {"user": user, "name": u["name"], "role": u["role"], "balance": u["balance"],
-                "pub": {"x": str(u["Q"].x), "y": str(u["Q"].y)},
+                "pub": {"x": str(u["Q"].x), "y": str(u["Q"].y)}, "next_id": self._next_id,
                 "history": [{"id": t["id"], "from": t["from"], "to": t["to"],
                              "amount": t["amount"]} for t in hist[-12:]]}
 

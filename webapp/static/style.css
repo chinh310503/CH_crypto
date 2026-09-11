@@ -56,8 +56,8 @@ button, .btn {
   margin-top: 12px;
 }
 button:hover { background: #1d4ed8; }
-button.ghost { background: #eef1f6; color: #1f2430; }
-button.ghost:hover { background: #e2e6ee; }
+.ghost { background: #eef1f6; color: #1f2430; }
+.ghost:hover { background: #e2e6ee; }
 button:disabled { opacity: .5; cursor: default; }
 
 /* bảng */
@@ -92,3 +92,15 @@ pre.cmd { background: #f8fafc; border: 1px solid #e2e5ea; border-radius: 8px;
 .flash-up { animation: fu 1.3s ease; }
 @keyframes fd { from { background: #fee2e2; } to { background: transparent; } }
 @keyframes fu { from { background: #dcfce7; } to { background: transparent; } }
+
+/* explorer — chi tiết đường cong (bung khi bấm vào tài khoản) */
+tr.acc { cursor: pointer; }
+tr.acc:hover { background: #f8fafc; }
+tr.acc .caret { color: #9ca3af; font-size: 11px; margin-right: 2px; }
+tr.acc-detail > td { background: #f8fafc; padding: 0 12px; }
+.curve-detail { padding: 10px 2px 14px; }
+.curve-detail .eq { font-weight: 600; margin-bottom: 10px; color: #334155; }
+.curve-detail .kv { display: grid; grid-template-columns: 220px 1fr; gap: 10px; padding: 3px 0; }
+.curve-detail .kv .k { color: #6b7280; font-size: 13px; }
+.curve-detail .kv .v { word-break: break-all; }
+@media (max-width: 560px) { .curve-detail .kv { grid-template-columns: 1fr; gap: 2px; } }

@@ -37,7 +37,7 @@ số dư trực tiếp), **/explorer** (sổ cái chữ ký + danh bạ khóa c�
 |---|----------|--------------------|--------------------------|
 | 1 | **Nonce reuse** | Ví mỗi người dùng có RNG hỏng khi ký ([vault.py](vault.py) `BrokenRNG`) | Sổ cái `GET /api/transactions` → `POST /api/tx/submit` |
 | 2 | **Psychic Signatures** | `verify_token` bỏ kiểm tra `r,s∈[1,n-1]` ([vault.py](vault.py)) | `GET /api/admin/users` + cookie token `(0,0)` |
-| 3 | **Đường cong yếu** | `megacorp` dùng đường cong bậc điểm sinh quá nhỏ (~2³⁷), field 256-bit | `GET /api/accounts` → Pollard's rho → `POST /api/tx/submit` |
+| 3 | **Đường cong yếu** | `omnicorp` dùng đường cong bậc nhóm 256-bit nhưng **TRƠN** (supersingular, `#E=p+1`) | `GET /api/accounts` → Pohlig-Hellman → `POST /api/tx/submit` |
 
 > Xác minh giao dịch (`/api/tx/submit`) dùng ECDSA **đúng chuẩn** — chữ ký `(0,0)`
 > bị từ chối. Lỗ hổng psychic chỉ nằm ở khâu xác minh **token phiên**, nên ba tấn
@@ -46,7 +46,7 @@ số dư trực tiếp), **/explorer** (sổ cái chữ ký + danh bạ khóa c�
 ## Dữ liệu
 
 20 tài khoản (5 cố định + 15 khách phát sinh, kèm PII giả), mỗi tài khoản một cặp
-khóa ECDSA; `megacorp` trên đường cong yếu. ~57 giao dịch đã ký (trong đó ví lỗi RNG
+khóa ECDSA; `omnicorp` trên đường cong yếu. ~57 giao dịch đã ký (trong đó ví lỗi RNG
 làm lặp nonce → lộ trên sổ cái).
 
 | Tài khoản | Mật khẩu | Vai trò | Số dư | Đường cong |
@@ -55,26 +55,32 @@ làm lặp nonce → lộ trên sổ cái).
 | bob | `bob123` | user (kẻ tấn công nhận tiền) | 1.500 | secp256k1 |
 | carol | `carol123` | user | 3.200 | secp256k1 |
 | admin | *(không công bố)* | admin | 100.000 | secp256k1 |
-| megacorp | — | enterprise | 5.000.000 | **enterprise-weak** |
+| omnicorp | — | enterprise | 5.000.000 | **omnicorp-256** |
 
 ## Kịch bản demo
 
 1. Chạy web app; mở **`/monitor`** (và **`/explorer`** để thấy các chữ ký cùng `r`).
 2. Terminal khác: `python attack_client/run_all.py`.
-3. Nhìn Monitor: số dư từng ví tụt về 0, dồn về `bob`; MegaCorp 5.000.000 → 0.
+3. Nhìn trang Số dư: số dư từng ví tụt về 0, dồn về `bob`; OmniCorp 5.000.000 → 0.
 4. Gõ **`/reset`** để diễn lại.
 
 ## Đường cong yếu (tấn công 3)
 
-`ecc_core/weak_curve.py` (sinh bởi `tools/gen_weak_curve.py`): supersingular
-`y²=x³+x` trên `F_p` với **p là số nguyên tố ~256 bit** (trông như đường cong thật)
-nhưng **bậc điểm sinh chỉ ~2³⁷** (cofactor khổng lồ). ECDSA vẫn chạy (bậc nguyên tố),
-nhưng Pollard's rho khôi phục khóa riêng trong ~15-25 giây. Đây là lỗi thực tế "tự
-chế đường cong / điểm sinh bậc quá nhỏ".
+`ecc_core/weak_curve.py` (sinh bởi `tools/gen_weak_curve.py`): đường cong **trông y
+như thật** — cùng dạng secp256k1 `y²=x³+b` (`a=0`, `b` ngẫu nhiên ~256 bit), trường
+`p` ~256 bit, **bậc điểm sinh `n` cũng ~256 bit**. Nhìn tham số công khai (`a,b,p,n,G`)
+gần như không phân biệt được với đường cong chuẩn.
 
-> **Vì sao không dùng đường cong 256-bit đầy đủ?** ECDSA cần bậc nhóm **nguyên tố**;
-> mà bậc nguyên tố 256-bit thì ECDLP là **bất khả thi** (đó chính là lý do nó an
-> toàn). Muốn phá được trong demo, bậc phải nhỏ (~2³⁷) — nên đây là đánh đổi bắt buộc.
+Điểm yếu ẩn: chọn `p ≡ 2 (mod 3)` nên đường cong **supersingular**, `#E = p+1`, và `p`
+được chọn sao cho `p+1` **trơn** (mọi thừa số nguyên tố ≤ ~2³⁶). Vì vậy dù `n` ~256 bit,
+chỉ cần **phân tích thừa số `n`** là thấy nó trơn → **Pohlig-Hellman + BSGS** khôi phục
+khóa riêng trong ~10-15 giây (thay vì ~2¹²⁸). Đây là lỗi thực tế "tự chế đường cong":
+tham số trông chuẩn nhưng bậc nhóm không phải số nguyên tố.
+
+> **Vì sao phá được mà vẫn trông thật?** Đường cong chuẩn có bậc nhóm **nguyên tố** nên
+> ECDLP tốn ~2¹²⁸ (bất khả thi). Ở đây bậc `n` ~256 bit *nhìn giống* an toàn, nhưng vì
+> **trơn** nên chi phí chỉ còn ~√(thừa số lớn nhất) ≈ 2¹⁸ → sụp đổ. Bài học: phải kiểm
+> tra `n` **nguyên tố**, không chỉ nhìn độ dài bit.
 
 ## Phòng chống
 

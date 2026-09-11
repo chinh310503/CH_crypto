@@ -6,6 +6,7 @@ Cung cấp cả bản xác minh AN TOÀN (`verify`) lẫn bản CÓ LỖI (`veri
 from __future__ import annotations
 import hashlib
 import secrets
+from math import gcd
 
 from .curve import EllipticCurve, Point, inverse_mod
 
@@ -35,11 +36,20 @@ def sign(curve: EllipticCurve, d: int, msg: bytes, k: int | None = None):
     """
     n = curve.n
     z = _hash_to_int(msg, n)
-    while True:
-        if k is None:
-            k_use = secrets.randbelow(n - 1) + 1
-        else:
-            k_use = k
+    # Với n HỢP SỐ (đường cong bậc trơn), có những (d, z) KHÔNG THỂ ký: nếu tồn tại
+    # ước nguyên tố ℓ|n chia hết CẢ d LẪN z thì z + r·d ≡ 0 (mod ℓ) với MỌI r, nên s
+    # không bao giờ khả nghịch mod n. Phát hiện sớm để tránh lặp vô hạn — người gọi
+    # cần đổi thông điệp. (n nguyên tố ⇒ điều kiện này luôn thỏa, không ảnh hưởng gì.)
+    if k is None and gcd(gcd(d, z), n) != 1:
+        raise ValueError("thông điệp không ký được trên đường cong bậc hợp số "
+                         "(gcd(d, z, n) > 1) — hãy đổi thông điệp")
+    for _ in range(4096):
+        k_use = secrets.randbelow(n - 1) + 1 if k is None else k
+        # k phải khả nghịch modulo n (đường cong chuẩn có n nguyên tố ⇒ luôn đúng).
+        if gcd(k_use, n) != 1:
+            if k is not None:
+                raise ValueError("k không khả nghịch modulo n, hãy chọn k khác")
+            continue
         R = curve.mul(k_use, curve.G)
         r = R.x % n
         if r == 0:
@@ -47,11 +57,13 @@ def sign(curve: EllipticCurve, d: int, msg: bytes, k: int | None = None):
                 raise ValueError("k cố định cho ra r = 0, hãy chọn k khác")
             continue
         s = (inverse_mod(k_use, n) * (z + r * d)) % n
-        if s == 0:
+        # s cũng phải khả nghịch mod n để trình xác minh chuẩn tính được s^{-1}.
+        if s == 0 or gcd(s, n) != 1:
             if k is not None:
-                raise ValueError("k cố định cho ra s = 0, hãy chọn k khác")
+                raise ValueError("k cố định cho ra s không hợp lệ, hãy chọn k khác")
             continue
         return r, s, z
+    raise ValueError("không sinh được nonce hợp lệ sau nhiều lần thử")
 
 
 def verify(curve: EllipticCurve, Q: Point, msg: bytes, r: int, s: int) -> bool:
@@ -63,7 +75,10 @@ def verify(curve: EllipticCurve, Q: Point, msg: bytes, r: int, s: int) -> bool:
     if not (1 <= s <= n - 1):
         return False
     z = _hash_to_int(msg, n)
-    w = inverse_mod(s, n)
+    try:
+        w = inverse_mod(s, n)          # n hợp số (bậc trơn) → s có thể không khả nghịch
+    except ZeroDivisionError:
+        return False
     u1 = (z * w) % n
     u2 = (r * w) % n
     P = curve.add(curve.mul(u1, curve.G), curve.mul(u2, Q))

@@ -35,10 +35,7 @@ def index():
 
 @app.route("/login")
 def login_page():
-    return render_template("login.html",
-                           demo_accounts=[("alice", "alice123"),
-                                          ("bob", "bob123"),
-                                          ("carol", "carol123")])
+    return render_template("login.html")
 
 
 @app.route("/api/login", methods=["POST"])
@@ -95,7 +92,8 @@ def api_accounts():
 def api_state():
     t = BANK.totals()
     return jsonify({"accounts": BANK.public_accounts(), "currency": CURRENCY,
-                    "assets": t["assets"], "tx_count": t["transactions"]})
+                    "assets": t["assets"], "tx_count": t["transactions"],
+                    "next_id": BANK.next_id()})
 
 
 @app.route("/api/tx/submit", methods=["POST"])
@@ -144,13 +142,6 @@ def api_admin_users():
 # --------------------------------------------------------------------------
 #  Tiện ích demo
 # --------------------------------------------------------------------------
-@app.route("/api/reset", methods=["POST"])
-def api_reset():
-    global BANK
-    BANK = Bank()
-    return jsonify({"ok": True})
-
-
 @app.route("/reset")
 def reset_demo():
     global BANK

@@ -3,23 +3,23 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>CryptoBank — Explorer</title>
+  <title>CryptoBank — Giao dịch</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
   <div class="topbar">
-    <div class="brand">CryptoBank · Explorer</div>
+    <div class="brand">CryptoBank · Giao dịch</div>
     <div class="nav">
       <a href="/dashboard">Ngân hàng</a>
-      <a href="/monitor">Monitor</a>
+      <a href="/monitor">Số dư</a>
       <a href="/reset">Reset</a>
     </div>
   </div>
 
   <div class="wrap">
     <div class="card">
-      <h2>Danh bạ khóa công khai (GET /api/accounts)</h2>
-      <p class="muted" style="margin-top:-6px">Mỗi tài khoản có khóa công khai ECDSA. Tài khoản <code>megacorp</code> dùng đường cong riêng.</p>
+      <h2>Danh sách khóa công khai</h2>
+      <p class="muted" style="margin-top:-6px">Bấm vào một tài khoản để xem đầy đủ thông số đường cong.</p>
       <table>
         <thead><tr><th>Tài khoản</th><th>Đường cong</th><th>Khóa công khai (x)</th></tr></thead>
         <tbody id="accs"></tbody>
@@ -27,8 +27,7 @@
     </div>
 
     <div class="card">
-      <h2>Sổ cái giao dịch (GET /api/transactions)</h2>
-      <p class="muted" style="margin-top:-6px">Mỗi giao dịch kèm chữ ký ECDSA (r, s) của người gửi — công khai như blockchain.</p>
+      <h2>Danh sách giao dịch</h2>
       <table>
         <thead><tr><th>#</th><th>Từ</th><th>Đến</th><th class="num">Số tiền</th><th>r</th><th>s</th></tr></thead>
         <tbody id="txs"></tbody>
@@ -38,11 +37,34 @@
 
   <script>
     const short = s => s && s.length > 14 ? s.slice(0, 10) + '…' + s.slice(-4) : s;
+    // Khối thông số đầy đủ của một đường cong + khóa công khai của tài khoản
+    function curveDetail(a) {
+      const c = a.curve;
+      const kv = (k, v) => `<div class="kv"><span class="k">${k}</span><span class="v mono">${v}</span></div>`;
+      return `<div class="curve-detail">`
+        + `<div class="eq">E: y² = x³ + ${c.a}·x + ${c.b}  (mod p)</div>`
+        + kv('a', c.a)
+        + kv('b', c.b)
+        + kv('p (số nguyên tố của trường)', c.p)
+        + kv('n (bậc điểm sinh G)', c.n)
+        + kv('Gx (điểm sinh)', c.Gx)
+        + kv('Gy (điểm sinh)', c.Gy)
+        + kv('Qx (khóa công khai)', a.pub.x)
+        + kv('Qy (khóa công khai)', a.pub.y)
+        + `</div>`;
+    }
     (async () => {
       const accs = await (await fetch('/api/accounts')).json();
-      document.getElementById('accs').innerHTML = accs.map(a =>
-        `<tr><td>${a.user}</td><td>${a.curve.name}</td><td class="mono">${short(a.pub.x)}</td></tr>`
+      document.getElementById('accs').innerHTML = accs.map((a, i) =>
+        `<tr class="acc" data-i="${i}"><td><span class="caret">▸</span> ${a.user}</td>`
+        + `<td>${a.curve.name}</td><td class="mono">${short(a.pub.x)}</td></tr>`
+        + `<tr class="acc-detail" id="d${i}" hidden><td colspan="3">${curveDetail(a)}</td></tr>`
       ).join('');
+      document.querySelectorAll('tr.acc').forEach(tr => tr.onclick = () => {
+        const d = document.getElementById('d' + tr.dataset.i);
+        d.hidden = !d.hidden;
+        tr.querySelector('.caret').textContent = d.hidden ? '▸' : '▾';
+      });
       const txs = await (await fetch('/api/transactions')).json();
       document.getElementById('txs').innerHTML = txs.slice().reverse().map(t =>
         `<tr><td>${t.id}</td><td>${t.from}</td><td>${t.to}</td><td class="num">${Number(t.amount).toLocaleString('vi-VN')}</td>`

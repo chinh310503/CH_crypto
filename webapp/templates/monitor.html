@@ -3,15 +3,15 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>CryptoBank — Monitor</title>
+  <title>CryptoBank — Số dư</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
   <div class="topbar">
-    <div class="brand">CryptoBank · Monitor</div>
+    <div class="brand">CryptoBank · Số dư</div>
     <div class="nav">
       <a href="/dashboard">Ngân hàng</a>
-      <a href="/explorer">Explorer</a>
+      <a href="/explorer">Giao dịch</a>
       <a href="/reset">Reset</a>
       <span class="muted" id="ts">—</span>
     </div>
@@ -21,15 +21,7 @@
     <div class="stat-row" id="stats"></div>
 
     <div class="card">
-      <h2>Chạy tấn công từ terminal</h2>
-      <pre class="cmd">python attack_client/attack_nonce_reuse.py   # rút sạch mọi ví (nonce reuse)
-python attack_client/attack_psychic.py       # chiếm admin, lộ PII
-python attack_client/attack_weakcurve.py     # rút MegaCorp (đường cong yếu, rho)
-python attack_client/run_all.py              # chạy cả ba</pre>
-    </div>
-
-    <div class="card">
-      <h2>Số dư tài khoản (tự cập nhật mỗi 1,5 giây)</h2>
+      <h2>Số dư tài khoản</h2>
       <table>
         <thead><tr><th>Tài khoản</th><th>Chủ tài khoản</th><th class="num">Số dư (CBC)</th></tr></thead>
         <tbody id="body"></tbody>
@@ -55,7 +47,7 @@ python attack_client/run_all.py              # chạy cả ba</pre>
       }).join('');
       last = {};
       d.accounts.forEach(a => last[a.user] = a.balance);
-      document.getElementById('ts').textContent = 'cập nhật ' + new Date().toLocaleTimeString('vi-VN');
+      document.getElementById('ts').textContent = 'Cập nhật ' + new Date().toLocaleTimeString('vi-VN');
     }
     tick();
     setInterval(tick, 1500);

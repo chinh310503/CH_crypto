@@ -21,21 +21,14 @@
       </form>
       <div id="msg"></div>
 
-      <div class="hint">
-        Tài khoản demo (bấm để điền):<br>
-        {% for u, p in demo_accounts %}
-          <code class="fill" data-u="{{u}}" data-p="{{p}}">{{u}} / {{p}}</code>
-        {% endfor %}
-      </div>
-      <div class="hint"><a href="/monitor">→ Mở trang theo dõi số dư (Monitor)</a></div>
+      <a href="/monitor" class="btn ghost"
+         style="display:block;text-align:center;text-decoration:none;width:100%">
+        Số dư toàn hệ thống
+      </a>
     </div>
   </div>
 
   <script>
-    document.querySelectorAll('.fill').forEach(el => el.onclick = () => {
-      document.getElementById('user').value = el.dataset.u;
-      document.getElementById('password').value = el.dataset.p;
-    });
     document.getElementById('loginForm').onsubmit = async (e) => {
       e.preventDefault();
       const msg = document.getElementById('msg');
