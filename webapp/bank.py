@@ -57,9 +57,8 @@ class Bank:
             self.users[u] = {
                 "name": name, "password": pw, "role": role, "balance": bal,
                 "curve": curve, "d": d, "Q": Q,
-                # CHỈ ví hỏng (alice) mới lặp nonce; còn lại dùng RNG an toàn.
+                # CHỈ ví hỏng (alice) mới lặp nonce khi seed; còn lại dùng RNG an toàn.
                 "rng": BrokenRNG(curve.n, pool_size=2) if broken else SafeRNG(curve.n),
-                "broken": broken,
                 "email": f"{u}@cryptobank.vn",
                 "cccd": "".join(str(rnd.randint(0, 9)) for _ in range(12)),
                 "phone": "09" + "".join(str(rnd.randint(0, 9)) for _ in range(8)),
@@ -185,7 +184,6 @@ class Bank:
             return None
         return {"user": user, "d": str(u["d"]), "curve": _curve_info(u["curve"]),
                 "pub": {"x": str(u["Q"].x), "y": str(u["Q"].y)},
-                "broken": u.get("broken", False),
                 "next_id": self._next_id}
 
     def totals(self):

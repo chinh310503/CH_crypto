@@ -101,17 +101,10 @@
       let h = '0x'; for (const x of b) h += x.toString(16).padStart(2, '0');
       return mod(BigInt(h), N - 1n) + 1n;
     }
-    // "ví lỗi": hồ nonce nhỏ (pool 2) → dùng lại nonce giữa các giao dịch
-    let POOL = null, IDX = 0;
-    function brokenNonce() {
-      if (!POOL) POOL = [randScalar(), randScalar()];
-      return POOL[(IDX++) % POOL.length];
-    }
     async function signTx(d, msg) {
       const z = mod(await hashInt(msg), N);
       while (true) {
-        // chỉ ví hỏng RNG (alice) mới lặp nonce; ví khác dùng nonce ngẫu nhiên an toàn
-        const k = (WALLET && WALLET.broken) ? brokenNonce() : randScalar();
+        const k = randScalar();
         const R = mul(k, G); const r = mod(R.x, N); if (r === 0n) continue;
         const s = mod(inv(k, N) * (z + r * d), N); if (s === 0n) continue;
         return { r, s };

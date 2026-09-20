@@ -26,14 +26,14 @@ def main():
     curve = curve_from_info(mc["curve"])
     Q = curve.point(int(mc["pub"]["x"]), int(mc["pub"]["y"]))
     print(f"Đường cong của '{VICTIM}': F_p ~{curve.p.bit_length()} bit, "
-          f"bậc n ~{curve.n.bit_length()} bit (trông như đường cong thật).")
+          f"bậc n ~{curve.n.bit_length()} bit.")
 
     factors = factorize(curve.n)
     q = max(factors)
     print(f"Phân tích n: {len(factors)} thừa số nguyên tố, lớn nhất ~2^{q.bit_length() - 1} "
           f"→ n TRƠN nên ECDLP phá được.")
 
-    print("Đang giải Pohlig-Hellman (~10-15s)...")
+    print("Đang giải Pohlig-Hellman")
     t0 = time.time()
     d, _ = pohlig_hellman_dlog(curve, curve.G, Q, curve.n, factors)
     dt = time.time() - t0
