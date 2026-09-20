@@ -1,16 +1,7 @@
-"""Sinh đường cong OMNICORP cố tình yếu cho web (ECDSA thật, phá bằng Pohlig-Hellman).
-
-Chiến lược "TRÔNG THẬT NHẤT CÓ THỂ":
-  - Đường cong  y² = x³ + b  với a = 0 và b NGẪU NHIÊN ~256 bit — cùng dạng với
-    secp256k1 (y² = x³ + 7), nhìn tham số công khai không phân biệt được đường cong thật.
-  - Chọn p ≡ 2 (mod 3) ⇒ đường cong SUPERSINGULAR, #E = p + 1 (khỏi cần Schoof);
-    thêm p ≡ 3 (mod 4) để lấy căn bậc hai nhanh.
-  - Ép p + 1 là số TRƠN: tích các thừa số nguyên tố nhỏ và MỘT thừa số ~2^Q_BITS.
-    Điểm sinh G lấy bậc ĐẦY ĐỦ n = p + 1 (~256 bit) → nhìn n cũng như đường cong thật.
-
-Điểm yếu chỉ lộ khi PHÂN TÍCH THỪA SỐ n: n trơn ⇒ Pohlig-Hellman + BSGS khôi phục
-khóa riêng trong ~10-15s (thay vì ~2^128). Đây là lỗi "tự chế đường cong": tham số
-trông chuẩn nhưng bậc nhóm không phải số nguyên tố.
+"""Sinh đường cong 'carlos' cố tình yếu cho web: a=0, b ngẫu nhiên, supersingular
+(p ≡ 2 mod 3 ⇒ #E = p+1), bậc nhóm n ~256 bit nhưng TRƠN → phá bằng Pohlig-Hellman.
+Nhìn tham số công khai gần như không phân biệt được đường cong chuẩn; điểm yếu chỉ
+lộ khi phân tích thừa số n. Chi tiết cơ chế: xem webapp/README.md.
 
 Chạy:  python tools/gen_weak_curve.py
 """
@@ -67,7 +58,6 @@ def point_order(curve, Pt, N, fac):
     return o
 
 
-# ---- Pohlig-Hellman (tự kiểm chứng) ----
 def _bsgs(curve, P, Q, order):
     m = isqrt(order) + 1
     table, cur = {}, curve.O
@@ -112,7 +102,7 @@ def main():
     p, q, fac = find_curve(rng)
     N = p + 1
     b = rng.randrange(2, p)                          # b NGẪU NHIÊN ⇒ trông như đường cong thật
-    curve = EllipticCurve(a=0, b=b, p=p, n=N, name="omnicorp-256")
+    curve = EllipticCurve(a=0, b=b, p=p, n=N, name="carlos-256")
     print(f"    p = {p}  ({p.bit_length()} bit)")
     print(f"    #E = p+1 gồm {len(fac)} thừa số nguyên tố, lớn nhất q = {q} (~2^{q.bit_length()-1})")
 
@@ -147,7 +137,7 @@ def main():
 
     out = os.path.join(os.path.dirname(__file__), "..", "ecc_core", "weak_curve.py")
     with open(out, "w", encoding="utf-8") as fh:
-        fh.write('"""Đường cong OMNICORP cố tình yếu cho web demo (ECDSA thật).\n\n')
+        fh.write('"""Đường cong CARLOS cố tình yếu cho web demo (ECDSA thật).\n\n')
         fh.write("TRÔNG NHƯ ĐƯỜNG CONG THẬT: cùng dạng với secp256k1  y^2 = x^3 + b  (a = 0),\n")
         fh.write("trường nguyên tố p ~256 bit, bậc điểm sinh n ~256 bit. Nhìn tham số công khai\n")
         fh.write("(a, b, p, n, G) gần như không phân biệt được với một đường cong chuẩn.\n\n")
@@ -165,7 +155,7 @@ def main():
         fh.write(f"    n={N},\n")
         fh.write(f"    Gx={G.x},\n")
         fh.write(f"    Gy={G.y},\n")
-        fh.write("    name='omnicorp-256')\n")
+        fh.write("    name='carlos-256')\n")
     print(f"[*] Đã ghi {os.path.abspath(out)}")
 
 

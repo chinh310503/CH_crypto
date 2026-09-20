@@ -1,7 +1,7 @@
 """Trạng thái & nghiệp vụ CryptoBank theo mô hình ví/sàn giao dịch.
 
 - Mỗi tài khoản có cặp khóa ECDSA riêng (người dùng thường trên secp256k1; tài khoản
-  enterprise 'omnicorp' trên đường cong yếu).
+  'carlos' trên đường cong yếu).
 - Chuyển tiền = giao dịch được KÝ ECDSA bằng khóa người gửi; server XÁC MINH chữ ký
   với khóa công khai của người gửi rồi mới thực thi (qua /api/tx/submit).
 - Ví người dùng dùng RNG hỏng khi ký → nonce trùng lặp lộ trên sổ cái công khai.
@@ -10,7 +10,7 @@ import json
 import random
 
 from ecc_core import STANDARD_CURVES, load_weak_curve
-from vault import Vault, BrokenRNG, sign_tx, verify_tx, new_keypair
+from vault import Vault, BrokenRNG, SafeRNG, sign_tx, verify_tx, new_keypair
 
 CURRENCY = "CBC"
 WEAK = load_weak_curve()
@@ -33,15 +33,16 @@ def _curve_info(curve) -> dict:
             "Gx": str(curve.G.x), "Gy": str(curve.G.y)}
 
 
+# Các tài khoản nền (khách hàng khác) — làm sổ cái/PII phong phú. RNG an toàn, không reuse.
 _PEOPLE = [
-    ("nguyenvana", "Nguyễn Văn An"),   ("tranthib", "Trần Thị Bình"),
-    ("levanc", "Lê Văn Cường"),        ("phamthid", "Phạm Thị Dung"),
-    ("hoangvane", "Hoàng Văn Em"),     ("vothif", "Võ Thị Phượng"),
-    ("dangvang", "Đặng Văn Giang"),    ("buithih", "Bùi Thị Hoa"),
-    ("dovank", "Đỗ Văn Khoa"),         ("ngothil", "Ngô Thị Lan"),
-    ("duongvanm", "Dương Văn Minh"),   ("lythin", "Lý Thị Nga"),
-    ("phanvano", "Phan Văn Oanh"),     ("huynhthip", "Huỳnh Thị Phúc"),
-    ("truongvanq", "Trương Văn Quân"),
+    ("an", "Nguyễn Văn An"),       ("binh", "Trần Thị Bình"),
+    ("cuong", "Lê Văn Cường"),     ("dung", "Phạm Thị Dung"),
+    ("em", "Hoàng Văn Em"),        ("phuong", "Võ Thị Phượng"),
+    ("giang", "Đặng Văn Giang"),   ("hoa", "Bùi Thị Hoa"),
+    ("khoa", "Đỗ Văn Khoa"),       ("lan", "Ngô Thị Lan"),
+    ("minh", "Dương Văn Minh"),    ("nga", "Lý Thị Nga"),
+    ("oanh", "Phan Văn Oanh"),     ("phuc", "Huỳnh Thị Phúc"),
+    ("quan", "Trương Văn Quân"),
 ]
 
 
@@ -51,25 +52,25 @@ class Bank:
         rnd = random.Random(20260908)
         self.users = {}
 
-        def add(u, name, role, bal, curve, pw=None):
+        def add(u, name, role, bal, curve, pw=None, broken=False):
             d, Q = new_keypair(curve)
             self.users[u] = {
                 "name": name, "password": pw, "role": role, "balance": bal,
                 "curve": curve, "d": d, "Q": Q,
-                "rng": BrokenRNG(curve.n, pool_size=2),   # ví lỗi RNG
+                # CHỈ ví hỏng (alice) mới lặp nonce; còn lại dùng RNG an toàn.
+                "rng": BrokenRNG(curve.n, pool_size=2) if broken else SafeRNG(curve.n),
+                "broken": broken,
                 "email": f"{u}@cryptobank.vn",
                 "cccd": "".join(str(rnd.randint(0, 9)) for _ in range(12)),
                 "phone": "09" + "".join(str(rnd.randint(0, 9)) for _ in range(8)),
             }
 
-        # Mỗi tài khoản thường được gán NGẪU NHIÊN một đường cong chuẩn (secp256k1
-        # hoặc họ NIST P-192/224/256) → danh bạ khóa công khai trông đa dạng như thật.
+        # 4 tài khoản demo (mật khẩu tên:tên123), mỗi tài khoản minh họa một tấn công.
         pick = lambda: rnd.choice(STANDARD_CURVES)
-        add("alice", "Nguyễn Alice", "user", 5000, pick(), "alice123")
-        add("bob", "Trần Bob", "user", 1500, pick(), "bob123")
-        add("carol", "Lê Carol", "user", 3200, pick(), "carol123")
-        add("admin", "Quản Trị Viên", "admin", 100000, pick(), "S3cr3t!" + str(rnd.randint(1000, 9999)))
-        add("omnicorp", "Tập Đoàn OmniCorp", "enterprise", 5000000, WEAK)  # đường cong yếu
+        add("alice", "Alice", "user", 5000, pick(), "alice123", broken=True)  # nonce reuse
+        add("bob", "Bob", "user", 1500, pick(), "bob123")                    # ví nhận tiền của kẻ tấn công
+        add("carlos", "Carlos", "enterprise", 5000000, WEAK, "carlos123")    # đường cong yếu
+        add("admin", "Quản Trị Viên", "admin", 100000, pick(), "admin123")   # psychic signatures
         for u, name in _PEOPLE:
             add(u, name, "user", rnd.randint(80, 400) * 100, pick())
 
@@ -78,17 +79,21 @@ class Bank:
         self._next_id = 1
         self._seed_history(rnd)
 
-    # ------------------------------------------------------------------
     def _seed_history(self, rnd):
-        """Mỗi ví (trừ omnicorp) gửi vài giao dịch nhỏ → sổ cái + nonce trùng."""
-        senders = [u for u in self.users if u != "omnicorp"]
-        others = list(senders)
-        for u in senders:
-            for _ in range(3):                       # 3 giao dịch → chắc chắn lặp nonce
-                to = rnd.choice([x for x in others if x != u])
+        """CHỈ alice dùng RNG hỏng → lặp nonce (demo nonce reuse). Các tài khoản khác
+        dùng RNG an toàn nên dù có giao dịch cũng KHÔNG lặp nonce → tấn công reuse chỉ
+        bắt được alice. carlos (đường cong yếu) không giao dịch để giữ số dư sạch."""
+        recipients = [u for u in self.users if u != "carlos"]
+        # alice: NHIỀU giao dịch → chắc chắn lặp nonce (hồ nonce chỉ có 2)
+        for _ in range(10):
+            to = rnd.choice([x for x in recipients if x != "alice"])
+            self._logged_in_transfer("alice", to, rnd.randint(10, 90))
+        # các tài khoản khác: vài giao dịch mỗi ví (RNG an toàn → nonce không lặp)
+        for u in [x for x in recipients if x != "alice"]:
+            for _ in range(rnd.randint(2, 4)):
+                to = rnd.choice([x for x in recipients if x != u])
                 self._logged_in_transfer(u, to, rnd.randint(10, 90))
 
-    # ------------------------------------------------------------------
     def _do_transfer(self, frm, to, amount):
         self.users[frm]["balance"] -= amount
         self.users[to]["balance"] += amount
@@ -98,9 +103,7 @@ class Bank:
                "amount": tx["amount"], "r": r, "s": s}
         self.transactions.append(rec)
         self.used_ids.add(tx["id"])
-        # Bộ đếm số thứ tự luôn tiến qua id vừa dùng → mọi giao dịch (seed, web, tấn
-        # công) đánh số tuần tự chung một dãy.
-        self._next_id = max(self._next_id, tx["id"] + 1)
+        self._next_id = max(self._next_id, tx["id"] + 1)   # giữ id tuần tự chung một dãy
 
     def _logged_in_transfer(self, frm, to, amount):
         """Tạo giao dịch, KÝ bằng khóa người gửi (RNG ví), rồi nộp như mọi giao dịch."""
@@ -182,6 +185,7 @@ class Bank:
             return None
         return {"user": user, "d": str(u["d"]), "curve": _curve_info(u["curve"]),
                 "pub": {"x": str(u["Q"].x), "y": str(u["Q"].y)},
+                "broken": u.get("broken", False),
                 "next_id": self._next_id}
 
     def totals(self):

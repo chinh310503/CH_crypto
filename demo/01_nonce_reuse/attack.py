@@ -34,13 +34,11 @@ def main():
     curve = SECP256K1
     n = curve.n
 
-    # ------------------------------------------------------------------ [1]
     io.step(1, "SETUP — nạn nhân tạo khóa và công bố khóa công khai Q")
     d, Q = keygen(curve)
     io.info("Khóa bí mật d (nạn nhân giữ kín)", io.short(d))
     io.info("Khóa công khai Q = d*G", f"({io.short(Q.x)}, {io.short(Q.y)})")
 
-    # ------------------------------------------------------------------ [2]
     io.step(2, "FLAW — RNG hỏng: cùng một nonce k dùng cho hai thông điệp")
     m1 = b"Chuyen 10 BTC cho Alice"
     m2 = b"Chuyen 20 BTC cho Bob"
@@ -56,14 +54,12 @@ def main():
     io.info("Nhận xét của kẻ tấn công", "r1 == r2 ?  " + ("CÓ → lộ nonce trùng!"
                                                           if r1 == r2 else "không"))
 
-    # ------------------------------------------------------------------ [3]
     io.step(3, "ATTACK — chỉ dùng dữ liệu công khai (r, s1, s2, z1, z2)")
     assert r1 == r2, "nonce không trùng — tấn công không áp dụng"
     k_rec, d_rec = recover_private_key(n, r1, s1, z1, s2, z2)
     io.info("Nonce k khôi phục", io.short(k_rec))
     io.info("So với k thật", "khớp" if k_rec == k_reused else "SAI")
 
-    # ------------------------------------------------------------------ [4]
     io.step(4, "PROOF — so khớp khóa và giả mạo một chữ ký mới")
     ok = io.compare_keys(d_rec, d)
 

@@ -37,7 +37,7 @@ số dư trực tiếp), **/explorer** (sổ cái chữ ký + danh bạ khóa c�
 |---|----------|--------------------|--------------------------|
 | 1 | **Nonce reuse** | Ví mỗi người dùng có RNG hỏng khi ký ([vault.py](vault.py) `BrokenRNG`) | Sổ cái `GET /api/transactions` → `POST /api/tx/submit` |
 | 2 | **Psychic Signatures** | `verify_token` bỏ kiểm tra `r,s∈[1,n-1]` ([vault.py](vault.py)) | `GET /api/admin/users` + cookie token `(0,0)` |
-| 3 | **Đường cong yếu** | `omnicorp` dùng đường cong bậc nhóm 256-bit nhưng **TRƠN** (supersingular, `#E=p+1`) | `GET /api/accounts` → Pohlig-Hellman → `POST /api/tx/submit` |
+| 3 | **Đường cong yếu** | `carlos` dùng đường cong bậc nhóm 256-bit nhưng **TRƠN** (supersingular, `#E=p+1`) | `GET /api/accounts` → Pohlig-Hellman → `POST /api/tx/submit` |
 
 > Xác minh giao dịch (`/api/tx/submit`) dùng ECDSA **đúng chuẩn** — chữ ký `(0,0)`
 > bị từ chối. Lỗ hổng psychic chỉ nằm ở khâu xác minh **token phiên**, nên ba tấn
@@ -45,23 +45,25 @@ số dư trực tiếp), **/explorer** (sổ cái chữ ký + danh bạ khóa c�
 
 ## Dữ liệu
 
-20 tài khoản (5 cố định + 15 khách phát sinh, kèm PII giả), mỗi tài khoản một cặp
-khóa ECDSA; `omnicorp` trên đường cong yếu. ~57 giao dịch đã ký (trong đó ví lỗi RNG
-làm lặp nonce → lộ trên sổ cái).
+**4 tài khoản demo**, mật khẩu dạng `tên:tên123` (đăng nhập xem trạng thái trước khi
+tấn công), mỗi tài khoản một cặp khóa ECDSA. `alice` ký **nhiều** giao dịch nên chắc
+chắn lặp nonce (demo nonce reuse); `carlos` nằm trên **đường cong yếu**. ~14 giao dịch
+đã ký trên sổ cái.
 
-| Tài khoản | Mật khẩu | Vai trò | Số dư | Đường cong |
-|-----------|----------|---------|-------|------------|
-| alice | `alice123` | user | 5.000 | secp256k1 |
-| bob | `bob123` | user (kẻ tấn công nhận tiền) | 1.500 | secp256k1 |
-| carol | `carol123` | user | 3.200 | secp256k1 |
-| admin | *(không công bố)* | admin | 100.000 | secp256k1 |
-| omnicorp | — | enterprise | 5.000.000 | **omnicorp-256** |
+| Tài khoản | Mật khẩu | Vai trò | Số dư | Đường cong | Demo tấn công |
+|-----------|----------|---------|-------|------------|---------------|
+| alice | `alice123` | user | 5.000 | chuẩn (ngẫu nhiên) | **Nonce reuse** (nhiều giao dịch) |
+| bob | `bob123` | user (kẻ tấn công nhận tiền) | 1.500 | chuẩn (ngẫu nhiên) | — |
+| carlos | `carlos123` | enterprise | 5.000.000 | **carlos-256** (yếu) | **Đường cong yếu** |
+| admin | `admin123` | admin | 100.000 | chuẩn (ngẫu nhiên) | **Psychic Signatures** |
+
+> Ba tài khoản chuẩn được gán ngẫu nhiên một đường cong chuẩn (secp256k1 / NIST P-192/224/256).
 
 ## Kịch bản demo
 
 1. Chạy web app; mở **`/monitor`** (và **`/explorer`** để thấy các chữ ký cùng `r`).
 2. Terminal khác: `python attack_client/run_all.py`.
-3. Nhìn trang Số dư: số dư từng ví tụt về 0, dồn về `bob`; OmniCorp 5.000.000 → 0.
+3. Nhìn trang Số dư: số dư từng ví tụt về 0, dồn về `bob`; Carlos 5.000.000 → 0.
 4. Gõ **`/reset`** để diễn lại.
 
 ## Đường cong yếu (tấn công 3)

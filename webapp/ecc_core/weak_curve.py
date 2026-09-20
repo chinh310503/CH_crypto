@@ -1,4 +1,4 @@
-"""Đường cong OMNICORP cố tình yếu cho web demo (ECDSA thật).
+"""Đường cong CARLOS cố tình yếu cho web demo (ECDSA thật).
 
 TRÔNG NHƯ ĐƯỜNG CONG THẬT: cùng dạng với secp256k1  y^2 = x^3 + b  (a = 0),
 trường nguyên tố p ~256 bit, bậc điểm sinh n ~256 bit. Nhìn tham số công khai
@@ -20,4 +20,4 @@ WEAK_CURVE = EllipticCurve(
     n=317898947492701219360988861516335550838944457830666552289487817265977313526140,
     Gx=268939492648433334770647888188866705849585133214072461260505837474016950346746,
     Gy=90685332260530970562115753546813157094563931595113825120097259427727924053297,
-    name='omnicorp-256')
+    name='carlos-256')

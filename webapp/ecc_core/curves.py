@@ -10,9 +10,7 @@
 from __future__ import annotations
 from .curve import EllipticCurve
 
-# ---------------------------------------------------------------------------
 # secp256k1 — y^2 = x^3 + 7 (Bitcoin/Ethereum)
-# ---------------------------------------------------------------------------
 SECP256K1 = EllipticCurve(
     a=0, b=7,
     p=0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F,
@@ -21,9 +19,7 @@ SECP256K1 = EllipticCurve(
     Gy=0x483ADA7726A3C4655DA4FBFC0E1108A8FD17B448A68554199C47D08FFB10D4B8,
     name="secp256k1")
 
-# ---------------------------------------------------------------------------
 # Họ NIST (a = -3): P-256 / P-224 / P-192 — đều an toàn, bậc n nguyên tố
-# ---------------------------------------------------------------------------
 SECP256R1 = EllipticCurve(  # NIST P-256
     a=-3, b=0x5ac635d8aa3a93e7b3ebbd55769886bc651d06b0cc53b0f63bce3c3e27d2604b,
     p=0xffffffff00000001000000000000000000000000ffffffffffffffffffffffff,

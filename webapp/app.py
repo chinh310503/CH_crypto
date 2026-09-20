@@ -25,9 +25,7 @@ def current_user():
     return BANK.vault.verify_token(tok)          # verify có lỗ hổng psychic
 
 
-# --------------------------------------------------------------------------
 #  Giao diện
-# --------------------------------------------------------------------------
 @app.route("/")
 def index():
     return redirect("/dashboard" if current_user() else "/login")
@@ -75,9 +73,7 @@ def explorer():
     return render_template("explorer.html", currency=CURRENCY)
 
 
-# --------------------------------------------------------------------------
 #  API công khai (bề mặt tấn công đều là chức năng thật)
-# --------------------------------------------------------------------------
 @app.route("/api/transactions")
 def api_transactions():
     return jsonify(BANK.public_transactions())
@@ -139,9 +135,7 @@ def api_admin_users():
     return jsonify({"accounts": BANK.all_accounts()})
 
 
-# --------------------------------------------------------------------------
 #  Tiện ích demo
-# --------------------------------------------------------------------------
 @app.route("/reset")
 def reset_demo():
     global BANK

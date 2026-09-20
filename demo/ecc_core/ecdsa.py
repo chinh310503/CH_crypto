@@ -36,16 +36,12 @@ def sign(curve: EllipticCurve, d: int, msg: bytes, k: int | None = None):
     """
     n = curve.n
     z = _hash_to_int(msg, n)
-    # Với n HỢP SỐ (đường cong bậc trơn), có những (d, z) KHÔNG THỂ ký: nếu tồn tại
-    # ước nguyên tố ℓ|n chia hết CẢ d LẪN z thì z + r·d ≡ 0 (mod ℓ) với MỌI r, nên s
-    # không bao giờ khả nghịch mod n. Phát hiện sớm để tránh lặp vô hạn — người gọi
-    # cần đổi thông điệp. (n nguyên tố ⇒ điều kiện này luôn thỏa, không ảnh hưởng gì.)
+    # Bậc n hợp số (đường cong yếu) có thể khiến (d, z) không ký được → báo sớm, tránh treo.
     if k is None and gcd(gcd(d, z), n) != 1:
         raise ValueError("thông điệp không ký được trên đường cong bậc hợp số "
                          "(gcd(d, z, n) > 1) — hãy đổi thông điệp")
     for _ in range(4096):
         k_use = secrets.randbelow(n - 1) + 1 if k is None else k
-        # k phải khả nghịch modulo n (đường cong chuẩn có n nguyên tố ⇒ luôn đúng).
         if gcd(k_use, n) != 1:
             if k is not None:
                 raise ValueError("k không khả nghịch modulo n, hãy chọn k khác")
@@ -57,7 +53,6 @@ def sign(curve: EllipticCurve, d: int, msg: bytes, k: int | None = None):
                 raise ValueError("k cố định cho ra r = 0, hãy chọn k khác")
             continue
         s = (inverse_mod(k_use, n) * (z + r * d)) % n
-        # s cũng phải khả nghịch mod n để trình xác minh chuẩn tính được s^{-1}.
         if s == 0 or gcd(s, n) != 1:
             if k is not None:
                 raise ValueError("k cố định cho ra s không hợp lệ, hãy chọn k khác")
@@ -76,7 +71,7 @@ def verify(curve: EllipticCurve, Q: Point, msg: bytes, r: int, s: int) -> bool:
         return False
     z = _hash_to_int(msg, n)
     try:
-        w = inverse_mod(s, n)          # n hợp số (bậc trơn) → s có thể không khả nghịch
+        w = inverse_mod(s, n)
     except ZeroDivisionError:
         return False
     u1 = (z * w) % n

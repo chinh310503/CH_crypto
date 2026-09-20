@@ -20,24 +20,20 @@ def main():
     io.banner("DEMO 2 — PSYCHIC SIGNATURES (CVE-2022-21449)")
     curve = SECP256K1
 
-    # ------------------------------------------------------------------ [1]
     io.step(1, "SETUP — nạn nhân có khóa; kẻ tấn công CHỈ biết khóa công khai Q")
     d, Q = keygen(curve)
     io.info("Khóa bí mật d (nạn nhân)", io.short(d))
     io.info("Khóa công khai Q", f"({io.short(Q.x)}, {io.short(Q.y)})")
     io.info("Kẻ tấn công biết d ?", "KHÔNG — hắn không hề có khóa bí mật")
 
-    # ------------------------------------------------------------------ [2]
     io.step(2, "FLAW — hệ thống dùng hàm xác minh THIẾU kiểm tra biên r, s")
     print("    • verify()          : ĐÚNG CHUẨN — có kiểm tra r, s ∈ [1, n-1]")
     print("    • verify_insecure() : CÓ LỖI    — bỏ bước kiểm tra đó (giống Java)")
 
-    # ------------------------------------------------------------------ [3]
     io.step(3, "ATTACK — chế tạo chữ ký rỗng (r = 0, s = 0), không cần khóa")
     forged_r, forged_s = 0, 0
     io.info("Chữ ký giả mạo (r, s)", f"({forged_r}, {forged_s})")
 
-    # ------------------------------------------------------------------ [4]
     io.step(4, "PROOF — thử chữ ký (0,0) trên nhiều thông điệp khác nhau")
     messages = [
         b"Toi la quan tri vien",

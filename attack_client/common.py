@@ -18,12 +18,6 @@ try:
     sys.stdout.reconfigure(encoding="utf-8")
 except Exception:
     pass
-os.system("")   # bật mã màu ANSI trên Windows 10+
-
-
-class C:
-    R = "\033[31m"; G = "\033[32m"; Y = "\033[33m"; CY = "\033[36m"
-    B = "\033[1m"; D = "\033[2m"; X = "\033[0m"
 
 
 _DEMO = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "demo")
@@ -35,7 +29,6 @@ from ecc_core.ecdsa import _hash_to_int as hash_to_int            # noqa: E402
 BASE = os.environ.get("TARGET", "http://127.0.0.1:5000").rstrip("/")
 
 
-# ======================= HTTP =======================
 def _http(method, path, body=None, cookie=None):
     data = json.dumps(body).encode() if body is not None else None
     req = urllib.request.Request(BASE + path, data=data, method=method)
@@ -66,7 +59,6 @@ def post(path, body, cookie=None):
     return _http("POST", path, body, cookie=cookie)
 
 
-# ======================= tiện ích ECDSA =======================
 def b64u(raw: bytes) -> str:
     return base64.urlsafe_b64encode(raw).decode().rstrip("=")
 
@@ -158,35 +150,11 @@ def pohlig_hellman_dlog(curve, G, Q, n, factors=None):
     return d % N, factors
 
 
-# ======================= in ấn =======================
-def banner(t):
-    print(f"\n{C.B}{'=' * 68}{C.X}\n{C.B}  {t}{C.X}\n{C.B}{'=' * 68}{C.X}")
-
-
-def step(n, t):
-    print(f"\n{C.Y}[{n}]{C.X} {C.B}{t}{C.X}")
-
-
-def info(k, v):
-    print(f"    {C.D}{k:<30}{C.X}: {v}")
-
-
-def ok(t):
-    print(f"    {C.G}✔{C.X} {t}")
-
-
-def bad(t):
-    print(f"    {C.R}✗{C.X} {t}")
-
-
-def impact(t):
-    print(f"\n{C.R}{C.B}  ⛔ IMPACT: {t}{C.X}\n")
-
-
 def money(x):
+    """Định dạng số tiền cho dễ đọc: 5000000 -> 5.000.000"""
     return f"{int(x):,}".replace(",", ".")
 
 
 def die(msg):
-    print(f"{C.R}LỖI: {msg}{C.X}")
+    print(f"LỖI: {msg}")
     sys.exit(1)

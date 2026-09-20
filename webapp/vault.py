@@ -38,9 +38,18 @@ class BrokenRNG:
         return k
 
 
-# --------------------------------------------------------------------------
+class SafeRNG:
+    """RNG ĐÚNG: mỗi lần ký sinh một nonce ngẫu nhiên mới → KHÔNG bao giờ lặp nonce.
+    Ví dùng RNG này an toàn trước tấn công nonce reuse (chỉ ví alice cố tình hỏng)."""
+
+    def __init__(self, n: int):
+        self.n = n
+
+    def next(self) -> int:
+        return secrets.randbelow(self.n - 1) + 1
+
+
 # Ký / xác minh GIAO DỊCH bằng ECDSA (khóa riêng của người gửi)
-# --------------------------------------------------------------------------
 def sign_tx(curve, d: int, tx_bytes: bytes, rng: BrokenRNG):
     """Ký giao dịch với nonce lấy từ RNG (có thể hỏng)."""
     for _ in range(8):
@@ -63,9 +72,7 @@ def new_keypair(curve):
     return d, curve.mul(d, curve.G)
 
 
-# --------------------------------------------------------------------------
 # Token phiên đăng nhập — ký bằng khóa MÁY CHỦ, XÁC MINH có lỗ hổng psychic
-# --------------------------------------------------------------------------
 class Vault:
     def __init__(self):
         n = SECP256K1.n

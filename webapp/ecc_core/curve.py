@@ -47,10 +47,10 @@ class Point:
     def __add__(self, other: "Point") -> "Point":
         return self.curve.add(self, other)
 
-    def __rmul__(self, k: int) -> "Point":   # cú pháp: k * P
+    def __rmul__(self, k: int) -> "Point":
         return self.curve.mul(k, self)
 
-    def __mul__(self, k: int) -> "Point":    # cú pháp: P * k
+    def __mul__(self, k: int) -> "Point":
         return self.curve.mul(k, self)
 
     def __repr__(self) -> str:
@@ -77,7 +77,6 @@ class EllipticCurve:
         self.name = name
         self.G = self.point(Gx, Gy) if Gx is not None else None
 
-    # ----- tạo điểm -----
     def point(self, x: int, y: int) -> Point:
         return Point(self, x % self.p, y % self.p)
 
@@ -94,17 +93,16 @@ class EllipticCurve:
         rhs = (P.x ** 3 + self.a * P.x + self.b) % self.p
         return lhs == rhs
 
-    # ----- luật nhóm -----
     def add(self, P: Point, Q: Point) -> Point:
         if P.is_infinity():
             return Q
         if Q.is_infinity():
             return P
         if P.x == Q.x and (P.y + Q.y) % self.p == 0:
-            return self.O                      # P + (-P) = O
-        if P.x == Q.x and P.y == Q.y:          # nhân đôi điểm
+            return self.O
+        if P.x == Q.x and P.y == Q.y:
             m = (3 * P.x * P.x + self.a) * inverse_mod(2 * P.y, self.p) % self.p
-        else:                                   # cộng hai điểm khác nhau
+        else:
             m = (Q.y - P.y) * inverse_mod((Q.x - P.x) % self.p, self.p) % self.p
         x3 = (m * m - P.x - Q.x) % self.p
         y3 = (m * (P.x - x3) - P.y) % self.p

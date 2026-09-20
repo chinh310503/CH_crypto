@@ -1,13 +1,6 @@
-"""Sinh một đường cong SUPERSINGULAR trông "thật" (trường nguyên tố ~256 bit) nhưng
-có BẬC NHÓM TRƠN, để demo Pohlig-Hellman một cách giống thực tế.
-
-Nguyên lý (không cần thuật toán đếm điểm Schoof):
-  Với p ≡ 3 (mod 4), đường cong  E: y^2 = x^3 + x  trên F_p là supersingular và có
-  đúng #E(F_p) = p + 1 điểm. Ta CỐ TÌNH chọn p sao cho p + 1 = q · s trong đó:
-     - s: phần "trơn" (tích các số nguyên tố nhỏ < 500),
-     - q: một số nguyên tố ~2^34 (thừa số lớn nhất).
-  Khi đó bậc nhóm 256-bit trông có vẻ an toàn, nhưng thừa số nguyên tố lớn nhất chỉ
-  ~2^34 → Pohlig-Hellman + BSGS phá được ECDLP (chỉ tốn ~2^17 phép toán).
+"""Sinh đường cong supersingular (y²=x³+x, p ≡ 3 mod 4 ⇒ #E = p+1) trông ~256 bit
+nhưng BẬC NHÓM TRƠN (thừa số lớn nhất ~2^34) → phá bằng Pohlig-Hellman. Chi tiết
+cơ chế: xem demo/03_pohlig_hellman/README.md.
 
 Chạy:  python tools/gen_weak_curve.py
 """
