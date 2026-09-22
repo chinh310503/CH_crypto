@@ -1,8 +1,8 @@
 """TẤN CÔNG 3 — ĐƯỜNG CONG YẾU / Pohlig-Hellman (qua HTTP, API công khai thật).
 
 Tài khoản 'carlos' dùng đường cong trông y như thật (dạng y²=x³+b như secp256k1,
-p và n đều ~256 bit) nhưng bậc nhóm n là số TRƠN. Phân tích thừa số n → Pohlig-
-Hellman khôi phục KHÓA RIÊNG → ký giao dịch rút sạch carlos về 'bob'.
+p và n đều ~256 bit) nhưng bậc nhóm n là số TRƠN. Phân tích thừa số n -> Pohlig-
+Hellman khôi phục KHÓA RIÊNG -> ký giao dịch rút sạch carlos về 'bob'.
 
     python attack_weakcurve.py     (mất ~10-15s do chạy Pohlig-Hellman)
 """
@@ -30,8 +30,12 @@ def main():
 
     factors = factorize(curve.n)
     q = max(factors)
+    if q.bit_length() > 48:
+        print(f"Phân tích n: thừa số nguyên tố lớn nhất ~2^{q.bit_length() - 1} -> n KHÔNG trơn "
+              f". ECDLP tốn ~2^{q.bit_length() // 2} -> KHÔNG phá được.")
+        return
     print(f"Phân tích n: {len(factors)} thừa số nguyên tố, lớn nhất ~2^{q.bit_length() - 1} "
-          f"→ n TRƠN nên ECDLP phá được.")
+          f"-> n TRƠN nên ECDLP phá được.")
 
     print("Đang giải Pohlig-Hellman")
     t0 = time.time()
@@ -44,7 +48,7 @@ def main():
 
     _, state = get("/api/state")
     amount = next(a["balance"] for a in state["accounts"] if a["user"] == VICTIM)
-    # Bậc n hợp số → một số thông điệp không ký được; đổi tx id tới khi ký được.
+    # Bậc n hợp số -> một số thông điệp không ký được; đổi tx id tới khi ký được.
     nid = state["next_id"]
     tx = r = s = None
     for i in range(256):

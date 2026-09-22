@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CryptoBank — Tài khoản</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <div class="topbar">
+    <div class="brand">CryptoBank</div>
+    <div class="nav">
+      <span>{{ user.user }} <span class="badge {{ user.role }}">{{ user.role }}</span></span>
+      <a href="/monitor">Số dư</a>
+      <a href="/explorer">Giao dịch</a>
+      <a href="/reset" onclick="return confirm('Khôi phục toàn bộ số dư về ban đầu?')">Reset</a>
+      <a href="/logout">Đăng xuất</a>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <div class="grid">
+      <div class="card">
+        <h2>Số dư khả dụng</h2>
+        <div class="balance" id="balance">…<small>{{ currency }}</small></div>
+      </div>
+      <div class="card">
+        <h2>Chuyển tiền</h2>
+        <form id="xferForm">
+          <label>Người nhận</label>
+          <input id="to" list="users" placeholder="vd: bob" required>
+          <datalist id="users">
+            <option value="alice"><option value="bob"><option value="carlos"><option value="admin">
+          </datalist>
+          <label>Số tiền ({{ currency }})</label>
+          <input id="amount" type="number" min="1" required>
+          <button type="submit" style="width:100%">Ký &amp; Gửi</button>
+        </form>
+        <div id="xferMsg"></div>
+      </div>
+    </div>
+
+    {% if user.role == 'admin' %}
+    <div class="card">
+      <h2>Quản trị — Danh sách tài khoản</h2>
+      <div id="adminBox" class="muted">Đang tải…</div>
+    </div>
+    {% endif %}
+
+    <div class="card">
+      <h2>Giao dịch gần đây</h2>
+      <table>
+        <thead><tr><th>#</th><th>Từ</th><th>Đến</th><th class="num">Số tiền</th></tr></thead>
+        <tbody id="hist"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    const CUR = "{{ currency }}";
+    const fmt = n => Number(n).toLocaleString('vi-VN');
+
+    // Chuẩn hóa GIỐNG HỆT bank.tx_bytes (khóa sắp xếp: amount, from, id, to).
+    const txBytes = tx => `{"amount":${tx.amount},"from":"${tx.from}","id":${tx.id},"to":"${tx.to}"}`;
+    const hex = a => [...a].map(x => x.toString(16).padStart(2, '0')).join('');
+
+    let WALLET = null, PRIV = null;
+    async function loadWallet() {
+      const r = await fetch('/api/wallet');
+      if (r.status === 401) { window.location = '/login'; return; }
+      WALLET = await r.json();
+      // Nạp khóa riêng vào WebCrypto (ECDSA P-256), non-extractable (không xuất lại được).
+      PRIV = await crypto.subtle.importKey('jwk', WALLET.jwk,
+        { name: 'ECDSA', namedCurve: 'P-256' }, false, ['sign']);
+    }
+    // Ký ECDSA P-256 bằng WebCrypto — nonce do trình duyệt sinh an toàn, không lặp.
+    async function signTx(msg) {
+      const sig = new Uint8Array(await crypto.subtle.sign(
+        { name: 'ECDSA', hash: 'SHA-256' }, PRIV, new TextEncoder().encode(msg)));
+      return { r: BigInt('0x' + hex(sig.slice(0, 32))).toString(),
+               s: BigInt('0x' + hex(sig.slice(32, 64))).toString() };
+    }
+
+    async function loadAccount() {
+      const r = await fetch('/api/account');
+      if (r.status === 401) { window.location = '/login'; return; }
+      const a = await r.json();
+      document.getElementById('balance').innerHTML = fmt(a.balance) + '<small>' + CUR + '</small>';
+      document.getElementById('hist').innerHTML = a.history.slice().reverse().map(t =>
+        `<tr><td>${t.id}</td><td>${t.from}</td><td>${t.to}</td><td class="num">${fmt(t.amount)}</td></tr>`
+      ).join('') || '<tr><td colspan="4" class="muted">Chưa có giao dịch</td></tr>';
+    }
+
+    document.getElementById('xferForm').onsubmit = async (e) => {
+      e.preventDefault();
+      const box = document.getElementById('xferMsg');
+      if (!PRIV) { box.className = 'msg err'; box.textContent = 'Ví chưa nạp xong'; return; }
+      box.className = 'msg'; box.textContent = 'Đang ký giao dịch trong trình duyệt…';
+      const acc = await (await fetch('/api/account')).json();
+      const tx = {
+        id: acc.next_id,
+        from: WALLET.user,
+        to: document.getElementById('to').value,
+        amount: parseInt(document.getElementById('amount').value, 10),
+      };
+      const { r, s } = await signTx(txBytes(tx));
+      const res = await (await fetch('/api/tx/submit', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...tx, r, s })
+      })).json();
+      box.className = 'msg ' + (res.ok ? 'ok' : 'err');
+      box.textContent = res.message;
+      if (res.ok) { loadAccount(); document.getElementById('xferForm').reset(); }
+    };
+
+    async function loadAdmin() {
+      const box = document.getElementById('adminBox');
+      if (!box) return;
+      const r = await fetch('/api/admin/users');
+      if (r.status !== 200) { box.className = 'msg err'; box.textContent = 'Bị từ chối'; return; }
+      const d = await r.json();
+      box.className = '';
+      box.innerHTML = '<table><thead><tr><th>Tài khoản</th><th>Họ tên</th><th>Vai trò</th>'
+        + '<th class="num">Số dư</th></tr></thead><tbody>'
+        + d.accounts.map(a => `<tr><td>${a.user}</td><td>${a.name || ''}</td>`
+            + `<td>${a.role}</td><td class="num">${fmt(a.balance)}</td></tr>`).join('')
+        + '</tbody></table>';
+    }
+    loadWallet();
+    loadAccount();
+    loadAdmin();
+  </script>
+</body>
+</html>

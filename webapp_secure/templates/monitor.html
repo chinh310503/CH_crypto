@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CryptoBank — Số dư</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <div class="topbar">
+    <div class="brand">CryptoBank · Số dư</div>
+    <div class="nav">
+      <a href="/dashboard">Ngân hàng</a>
+      <a href="/explorer">Giao dịch</a>
+      <a href="/reset">Reset</a>
+      <span class="muted" id="ts">—</span>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <div class="stat-row" id="stats"></div>
+
+    <div class="card">
+      <h2>Số dư tài khoản</h2>
+      <table>
+        <thead><tr><th>Tài khoản</th><th>Chủ tài khoản</th><th class="num">Số dư (CBC)</th></tr></thead>
+        <tbody id="body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    const fmt = n => Number(n).toLocaleString('vi-VN');
+    let last = {};
+    async function tick() {
+      let d;
+      try { d = await (await fetch('/api/state')).json(); } catch (e) { return; }
+      document.getElementById('stats').innerHTML =
+        `<div class="stat"><div class="label">Tổng tài sản</div><div class="value">${fmt(d.assets)} <small>CBC</small></div></div>` +
+        `<div class="stat"><div class="label">Số tài khoản</div><div class="value">${d.accounts.length}</div></div>` +
+        `<div class="stat"><div class="label">Số giao dịch</div><div class="value">${fmt(d.tx_count)}</div></div>`;
+      document.getElementById('body').innerHTML = d.accounts.map(a => {
+        let cls = '';
+        if (last[a.user] !== undefined && last[a.user] !== a.balance)
+          cls = a.balance < last[a.user] ? 'flash-down' : 'flash-up';
+        return `<tr class="${cls}"><td>${a.user}</td><td>${a.name || ''}</td><td class="num">${fmt(a.balance)}</td></tr>`;
+      }).join('');
+      last = {};
+      d.accounts.forEach(a => last[a.user] = a.balance);
+      document.getElementById('ts').textContent = 'Cập nhật ' + new Date().toLocaleTimeString('vi-VN');
+    }
+    tick();
+    setInterval(tick, 1500);
+  </script>
+</body>
+</html>

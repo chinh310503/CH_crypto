@@ -22,7 +22,7 @@ def main():
     bob = next((a for a in state["accounts"] if a["user"] == "bob"), None)
     if bob:
         print(f"Xong. Tài khoản 'bob' (kẻ tấn công) hiện có {money(bob['balance'])} CBC.")
-    print("Gõ http://127.0.0.1:5000/reset để khôi phục trạng thái ban đầu.")
+    print("Truy cập http://127.0.0.1:5000/reset để khôi phục trạng thái ban đầu.")
 
 
 if __name__ == "__main__":
