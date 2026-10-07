@@ -49,6 +49,7 @@ def main():
                 if d and cu.mul(d, cu.G) == cu.point(*pub[u]):
                     keys[u] = (d, cu)
                     print(f"Phát hiện nonce trùng ở '{u}' -> khôi phục được khóa riêng.")
+                    print(f"Khóa riêng được trích xuất: {d}")
                 break
             seen[t["r"]] = t
     if not keys:

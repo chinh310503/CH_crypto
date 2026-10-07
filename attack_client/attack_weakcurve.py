@@ -35,8 +35,12 @@ def main():
               f". ECDLP tốn ~2^{q.bit_length() // 2} -> KHÔNG phá được.")
         return
     print(f"Phân tích n: {len(factors)} thừa số nguyên tố, lớn nhất ~2^{q.bit_length() - 1} "
-          f"-> n TRƠN nên ECDLP phá được.")
+          f"-> n trơn.")
 
+    print(f"Phân tích thừa số nguyên tố của n: N = ", end = '')
+    bt = " * ".join([f"{x}^{y}" for x, y in factors.items()])
+    print(bt)
+    
     print("Đang giải Pohlig-Hellman")
     t0 = time.time()
     d, _ = pohlig_hellman_dlog(curve, curve.G, Q, curve.n, factors)
@@ -45,6 +49,7 @@ def main():
         print("Khôi phục khóa THẤT BẠI.")
         return
     print(f"Khôi phục khóa riêng thành công ({dt:.1f}s).")
+    print(f"Khóa riêng tìm được: {d}")
 
     _, state = get("/api/state")
     amount = next(a["balance"] for a in state["accounts"] if a["user"] == VICTIM)
@@ -62,7 +67,7 @@ def main():
         return
     _, res = post("/api/tx/submit", {**tx, "r": str(r), "s": str(s)})
     if isinstance(res, dict) and res.get("ok"):
-        print(f"Rút {money(amount)} CBC từ '{VICTIM}' về '{ATTACKER}'.")
+        print(f"Rút {money(amount)} CBC từ {VICTIM} về {ATTACKER}.")
     else:
         print(f"Thất bại: {res.get('message') if isinstance(res, dict) else res}")
 
