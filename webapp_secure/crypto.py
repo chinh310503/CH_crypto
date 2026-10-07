@@ -1,12 +1,3 @@
-"""Mật mã của CryptoBank (bản AN TOÀN) — chỉ dùng thư viện đã kiểm định.
-
-- `cryptography` (pyca, backend OpenSSL): ECDSA trên NIST P-256 — sinh khóa, ký với
-  nonce an toàn từ CSPRNG, và xác minh ĐÚNG CHUẨN (tự kiểm tra điểm nằm trên đường
-  cong, từ chối chữ ký sai / r,s ngoài khoảng / (0,0)).
-- PyJWT: token phiên ES256; chữ ký sai bị từ chối ngay.
-
-Không tự cài toán đường cong, không có đường cong tùy chọn, không có RNG hỏng.
-"""
 import base64
 
 import jwt
@@ -18,7 +9,6 @@ from cryptography.hazmat.primitives.asymmetric.utils import (
 
 CURVE = ec.SECP256R1()
 
-# Tham số miền P-256 (hằng số chuẩn, công khai) — để hiển thị ở explorer.
 P256_PARAMS = {
     "name": "secp256r1",
     "a": str(0xffffffff00000001000000000000000000000000fffffffffffffffffffffffc),
@@ -45,7 +35,6 @@ def public_xy(pub):
 
 
 def private_jwk(priv) -> dict:
-    """Xuất khóa RIÊNG dạng JWK để trình duyệt nạp vào WebCrypto (non-extractable)."""
     n = priv.private_numbers()
     p = n.public_numbers
     return {"kty": "EC", "crv": "P-256",
@@ -56,12 +45,10 @@ def private_jwk(priv) -> dict:
 
 
 def sign_tx(priv, message: bytes):
-    """Ký giao dịch bằng thư viện (nonce an toàn) → trả (r, s)."""
     return decode_dss_signature(priv.sign(message, ec.ECDSA(hashes.SHA256())))
 
 
 def verify_tx(pub, message: bytes, r: int, s: int) -> bool:
-    """Xác minh ECDSA đúng chuẩn: (0,0) / sai / r,s ngoài [1,n-1] đều bị từ chối."""
     if not (r > 0 and s > 0):
         return False
     try:
@@ -72,7 +59,6 @@ def verify_tx(pub, message: bytes, r: int, s: int) -> bool:
 
 
 def server_keypair_pem():
-    """Khóa EC của server để ký/xác minh token phiên (PEM cho PyJWT)."""
     priv = ec.generate_private_key(CURVE)
     priv_pem = priv.private_bytes(serialization.Encoding.PEM,
                                   serialization.PrivateFormat.PKCS8,

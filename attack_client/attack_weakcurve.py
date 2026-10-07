@@ -1,11 +1,3 @@
-"""TẤN CÔNG 3 — ĐƯỜNG CONG YẾU / Pohlig-Hellman (qua HTTP, API công khai thật).
-
-Tài khoản 'carlos' dùng đường cong trông y như thật (dạng y²=x³+b như secp256k1,
-p và n đều ~256 bit) nhưng bậc nhóm n là số TRƠN. Phân tích thừa số n -> Pohlig-
-Hellman khôi phục KHÓA RIÊNG -> ký giao dịch rút sạch carlos về 'bob'.
-
-    python attack_weakcurve.py     (mất ~10-15s do chạy Pohlig-Hellman)
-"""
 import time
 
 from common import (get, post, curve_from_info, factorize,
@@ -53,7 +45,6 @@ def main():
 
     _, state = get("/api/state")
     amount = next(a["balance"] for a in state["accounts"] if a["user"] == VICTIM)
-    # Bậc n hợp số -> một số thông điệp không ký được; đổi tx id tới khi ký được.
     nid = state["next_id"]
     tx = r = s = None
     for i in range(256):

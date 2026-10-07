@@ -1,10 +1,3 @@
-"""Trạng thái & nghiệp vụ CryptoBank — BẢN AN TOÀN.
-
-Mọi tài khoản dùng ECDSA NIST P-256; ký/xác minh giao dịch và token phiên đều qua
-thư viện (`cryptography`, PyJWT). KHÔNG có RNG hỏng, KHÔNG đường cong yếu, KHÔNG bỏ
-bước kiểm tra — nên ba tấn công vào bản cũ (nonce reuse, psychic, đường cong yếu)
-đều vô hiệu.
-"""
 import json
 import random
 
@@ -14,7 +7,6 @@ CURRENCY = "CBC"
 
 
 def tx_bytes(tx: dict) -> bytes:
-    """Chuẩn hóa giao dịch thành bytes để ký/xác minh (phải khớp tuyệt đối với client)."""
     return json.dumps(
         {"id": tx["id"], "from": tx["from"], "to": tx["to"], "amount": tx["amount"]},
         separators=(",", ":"), sort_keys=True,
@@ -49,7 +41,6 @@ class Bank:
                 "phone": "09" + "".join(str(rnd.randint(0, 9)) for _ in range(8)),
             }
 
-        # 4 tài khoản demo (mật khẩu tên:tên123) + các khách hàng nền — TẤT CẢ P-256.
         add("alice", "Alice", "user", 5000, "alice123")
         add("bob", "Bob", "user", 1500, "bob123")
         add("carlos", "Carlos", "enterprise", 5000000, "carlos123")
@@ -69,7 +60,6 @@ class Bank:
         return crypto.verify_token(self._tok_pub, token)
 
     def _seed_history(self, rnd):
-        """Vài giao dịch bình thường mỗi ví — đều ký an toàn, nonce không lặp."""
         senders = list(self.users)
         for u in senders:
             for _ in range(rnd.randint(1, 3)):
@@ -84,8 +74,6 @@ class Bank:
         return self.submit_tx(tx, r, s)
 
     def submit_tx(self, tx, r, s):
-        """Con đường DUY NHẤT để tiền dịch chuyển: xác minh chữ ký ECDSA của người gửi
-        (qua thư viện) rồi thực thi."""
         frm, to = tx.get("from"), tx.get("to")
         if frm not in self.users or to not in self.users:
             return False, "Tài khoản không tồn tại"
@@ -147,7 +135,6 @@ class Bank:
                              "amount": t["amount"]} for t in hist[-12:]]}
 
     def wallet(self, user):
-        """Nạp ví vào trình duyệt: khóa riêng dạng JWK để WebCrypto import (non-custodial)."""
         u = self.users.get(user)
         if not u:
             return None

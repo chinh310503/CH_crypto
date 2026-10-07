@@ -1,12 +1,3 @@
-"""Tham số các đường cong dùng trong CryptoBank.
-
-- Các đường cong CHUẨN, AN TOÀN (secp256k1 + họ NIST P-192/224/256): mỗi tài khoản
-  được gán ngẫu nhiên một trong số này, nên danh bạ khóa công khai trông đa dạng
-  như hệ thống thật. Tất cả đều có bậc nhóm nguyên tố lớn → nonce reuse vẫn là con
-  đường tấn công (không phải do đường cong yếu).
-- Đường cong ENTERPRISE cố tình yếu (supersingular ~256 bit, bậc nhóm TRƠN) cho
-  tấn công Pohlig-Hellman / Pollard's rho, nạp từ `weak_curve.py`.
-"""
 from __future__ import annotations
 from .curve import EllipticCurve
 
@@ -19,7 +10,7 @@ SECP256K1 = EllipticCurve(
     Gy=0x483ADA7726A3C4655DA4FBFC0E1108A8FD17B448A68554199C47D08FFB10D4B8,
     name="secp256k1")
 
-# Họ NIST (a = -3): P-256 / P-224 / P-192 — đều an toàn, bậc n nguyên tố
+# NIST (a = -3): P-256 / P-224 / P-192 
 SECP256R1 = EllipticCurve(  # NIST P-256
     a=-3, b=0x5ac635d8aa3a93e7b3ebbd55769886bc651d06b0cc53b0f63bce3c3e27d2604b,
     p=0xffffffff00000001000000000000000000000000ffffffffffffffffffffffff,
@@ -44,14 +35,9 @@ SECP192R1 = EllipticCurve(  # NIST P-192
     Gy=0x07192b95ffc8da78631011ed6b24cdd573f977a11e794811,
     name="secp192r1")
 
-# Nhóm đường cong chuẩn để gán ngẫu nhiên cho các tài khoản người dùng thường.
 STANDARD_CURVES = [SECP256K1, SECP256R1, SECP224R1, SECP192R1]
 
 
 def load_weak_curve():
-    """Nạp đường cong enterprise cố tình yếu (supersingular ~256 bit, bậc trơn)
-    cho demo Pohlig-Hellman. Import trễ để hai demo còn lại không phụ thuộc vào
-    file sinh sẵn.
-    """
     from .weak_curve import WEAK_CURVE
     return WEAK_CURVE

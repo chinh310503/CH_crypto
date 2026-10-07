@@ -1,11 +1,3 @@
-"""TẤN CÔNG 1 — NONCE REUSE (qua HTTP, dùng API công khai thật).
-
-Ví hỏng RNG nên nhiều giao dịch lặp lại nonce. Từ sổ cái công khai
-(/api/transactions), phát hiện các chữ ký cùng r của cùng người gửi -> khôi phục
-KHÓA RIÊNG -> ký giao dịch rút sạch tiền về 'bob' qua /api/tx/submit.
-
-    python attack_nonce_reuse.py
-"""
 import time
 
 from common import (get, post, tx_bytes, hash_to_int, inverse_mod,
@@ -33,7 +25,6 @@ def main():
     curves = {a["user"]: curve_from_info(a["curve"]) for a in accounts}
     print(f"Thu thập {len(txs)} chữ ký từ sổ cái công khai.")
 
-    # Nhóm chữ ký theo người gửi, tìm nonce trùng (cùng r) rồi khôi phục khóa.
     by_sender = {}
     for t in txs:
         by_sender.setdefault(t["from"], []).append(t)
@@ -56,7 +47,6 @@ def main():
         print("Không tìm thấy ví nào lặp nonce.")
         return
 
-    # Ký giao dịch giả rút sạch từng ví bị lộ khóa về 'bob'.
     stolen = 0
     nid = state["next_id"]
     for u, (d, cu) in keys.items():

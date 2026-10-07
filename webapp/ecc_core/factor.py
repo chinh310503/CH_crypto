@@ -1,7 +1,3 @@
-"""Số học cần cho tấn công: kiểm tra nguyên tố (Miller-Rabin) và phân tích thừa số
-(trial division + Pollard rho). Đủ nhanh để factor một bậc nhóm 256-bit *trơn*
-(mọi thừa số nguyên tố tương đối nhỏ) — chính là điều khiến Pohlig-Hellman khả thi.
-"""
 from __future__ import annotations
 import math
 import random
@@ -19,7 +15,7 @@ def is_prime(n: int) -> bool:
     while d % 2 == 0:
         d //= 2
         r += 1
-    for a in _SMALL:                       # đủ mạnh cho phạm vi demo
+    for a in _SMALL:
         x = pow(a, d, n)
         if x in (1, n - 1):
             continue
@@ -48,8 +44,6 @@ def _pollard_rho(n: int) -> int:
 
 
 def factorize(n: int, small_bound: int = 100_000) -> dict:
-    """Trả về {prime: exponent}. Chia thử tới `small_bound`, phần còn lại xử lý
-    bằng kiểm tra nguyên tố + Pollard rho."""
     factors: dict[int, int] = {}
     d = 2
     while d <= small_bound and d * d <= n:

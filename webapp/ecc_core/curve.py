@@ -1,27 +1,13 @@
-"""Số học đường cong elliptic trên trường hữu hạn F_p (dạng Weierstrass ngắn).
-
-    y^2 = x^3 + a*x + b   (mod p)
-
-Đây là phần lõi dùng chung cho cả ba demo tấn công. Code được viết ưu tiên
-*dễ đọc* (mục đích giáo dục) hơn là tối ưu tốc độ.
-"""
 from __future__ import annotations
 
 
 def inverse_mod(k: int, m: int) -> int:
-    """Nghịch đảo modulo: trả về x sao cho (k * x) % m == 1.
-
-    Dùng cho phép chia trên trường F_p và trên vành Z_n. Ném lỗi nếu k không
-    khả nghịch (gcd(k, m) != 1) — điều này lại chính là "manh mối" bị khai thác
-    trong một số tấn công.
-    """
     if k % m == 0:
         raise ZeroDivisionError(f"{k} không khả nghịch modulo {m}")
     return pow(k % m, -1, m)
 
 
 class Point:
-    """Một điểm trên đường cong. Điểm vô cực (phần tử trung hòa) có infinity=True."""
 
     def __init__(self, curve: "EllipticCurve", x, y, infinity: bool = False):
         self.curve = curve
@@ -60,13 +46,6 @@ class Point:
 
 
 class EllipticCurve:
-    """Đường cong y^2 = x^3 + a*x + b trên F_p.
-
-    Tham số tùy chọn:
-      n         bậc của điểm sinh G (nếu biết)
-      G         điểm sinh (Point)
-      name      tên hiển thị
-    """
 
     def __init__(self, a: int, b: int, p: int, n: int | None = None,
                  Gx: int | None = None, Gy: int | None = None, name: str = ""):
@@ -82,11 +61,9 @@ class EllipticCurve:
 
     @property
     def O(self) -> Point:
-        """Điểm vô cực."""
         return Point(self, None, None, infinity=True)
 
     def contains(self, P: Point) -> bool:
-        """Kiểm tra điểm có nằm trên đường cong không (mấu chốt chống invalid-curve)."""
         if P.is_infinity():
             return True
         lhs = (P.y * P.y) % self.p
@@ -109,11 +86,6 @@ class EllipticCurve:
         return Point(self, x3, y3)
 
     def mul(self, k: int, P: Point) -> Point:
-        """Nhân vô hướng k*P bằng thuật toán double-and-add.
-
-        Không rút gọn k theo n để giữ tính tổng quát: hàm vẫn đúng cho điểm có
-        bậc bất kỳ (cần cho Pohlig-Hellman và các đường cong phụ).
-        """
         if P.is_infinity() or k == 0:
             return self.O
         if k < 0:

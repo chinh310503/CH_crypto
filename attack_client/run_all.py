@@ -1,9 +1,3 @@
-"""Chạy lần lượt cả ba tấn công vào CryptoBank.
-
-    python run_all.py
-
-Mẹo: mở http://127.0.0.1:5000/monitor để xem số dư đổi trực tiếp khi tấn công.
-"""
 import attack_nonce_reuse
 import attack_psychic
 import attack_weakcurve

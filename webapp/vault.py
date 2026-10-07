@@ -1,14 +1,3 @@
-"""Mật mã của CryptoBank — TOÀN BỘ dùng ECDSA. Cố tình cài 3 lỗ hổng:
-
- (1) Nonce reuse    : ví mỗi người dùng có RNG hỏng (hồ nonce nhỏ) khi KÝ GIAO DỊCH
-                      → hai giao dịch cùng người gửi lặp nonce → lộ khóa riêng.
- (2) Psychic sigs   : verify_token bỏ kiểm tra r,s∈[1,n-1] → chấp nhận chữ ký (0,0).
- (3) Đường cong yếu : tài khoản enterprise dùng đường cong có bậc điểm sinh quá nhỏ
-                      (~2^37) → Pollard's rho khôi phục khóa riêng từ khóa công khai.
-
-Mọi khóa bí mật KHÔNG bao giờ lộ ra ngoài; tấn công chỉ dùng dữ liệu công khai
-(sổ cái chữ ký, danh bạ khóa công khai, tham số đường cong).
-"""
 import base64
 import json
 import secrets
@@ -25,8 +14,6 @@ def ub64u(s: str) -> bytes:
 
 
 class BrokenRNG:
-    """RNG ví hỏng: chỉ có một 'hồ' nonce nhỏ, lặp vòng → nonce trùng lặp giữa các
-    giao dịch của cùng một ví (mô phỏng sự cố ví Bitcoin trên Android 2013)."""
 
     def __init__(self, n: int, pool_size: int = 2):
         self.pool = [secrets.randbelow(n - 1) + 1 for _ in range(pool_size)]
@@ -39,8 +26,6 @@ class BrokenRNG:
 
 
 class SafeRNG:
-    """RNG ĐÚNG: mỗi lần ký sinh một nonce ngẫu nhiên mới → KHÔNG bao giờ lặp nonce.
-    Ví dùng RNG này an toàn trước tấn công nonce reuse (chỉ ví alice cố tình hỏng)."""
 
     def __init__(self, n: int):
         self.n = n
@@ -49,21 +34,18 @@ class SafeRNG:
         return secrets.randbelow(self.n - 1) + 1
 
 
-# Ký / xác minh GIAO DỊCH bằng ECDSA (khóa riêng của người gửi)
 def sign_tx(curve, d: int, tx_bytes: bytes, rng: BrokenRNG):
-    """Ký giao dịch với nonce lấy từ RNG (có thể hỏng)."""
     for _ in range(8):
         k = rng.next()
         try:
             r, s, _ = sign(curve, d, tx_bytes, k=k)
             return r, s
         except ValueError:
-            continue          # k xấu (r=0/s=0) — cực hiếm; thử nonce kế tiếp
+            continue
     raise RuntimeError("không ký được giao dịch")
 
 
 def verify_tx(curve, Q, tx_bytes: bytes, r: int, s: int) -> bool:
-    """Xác minh ĐÚNG CHUẨN chữ ký giao dịch (ECDSA)."""
     return verify(curve, Q, tx_bytes, r, s)
 
 
@@ -72,7 +54,6 @@ def new_keypair(curve):
     return d, curve.mul(d, curve.G)
 
 
-# Token phiên đăng nhập — ký bằng khóa MÁY CHỦ, XÁC MINH có lỗ hổng psychic
 class Vault:
     def __init__(self):
         n = SECP256K1.n
@@ -97,7 +78,6 @@ class Vault:
         return f"{h}.{p}".encode(), p, r, s
 
     def verify_token(self, token: str):
-        """LỖ HỔNG (psychic): dùng verify_insecure → chấp nhận (r,s)=(0,0)."""
         try:
             msg, p, r, s = self._parse_token(token)
         except Exception:
@@ -107,7 +87,6 @@ class Vault:
         return None
 
     def verify_token_secure(self, token: str):
-        """Bản VÁ (đối chứng) — verify đúng chuẩn, từ chối (0,0)."""
         try:
             msg, p, r, s = self._parse_token(token)
         except Exception:

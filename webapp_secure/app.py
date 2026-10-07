@@ -1,11 +1,3 @@
-"""CryptoBank — BẢN AN TOÀN (không còn lỗ hổng ECDSA).
-
-Cùng giao diện/endpoint với bản cũ nhưng mọi mật mã dùng thư viện đã kiểm định:
-ECDSA P-256 (`cryptography` + WebCrypto), token phiên ES256 (PyJWT). Chạy song song
-với bản `webapp/` (có lỗ hổng) để đối chứng — cùng bộ `attack_client` sẽ thất bại ở đây.
-
-Chạy:  python app.py    rồi mở http://127.0.0.1:5000
-"""
 from flask import (Flask, request, jsonify, render_template, redirect,
                    make_response)
 
@@ -19,7 +11,7 @@ def current_user():
     tok = request.cookies.get("session_token")
     if not tok:
         return None
-    return BANK.verify_token(tok)          # PyJWT ES256 — từ chối token sai/(0,0)
+    return BANK.verify_token(tok)
 
 
 @app.route("/")

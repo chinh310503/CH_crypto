@@ -1,16 +1,3 @@
-"""Đường cong CARLOS cố tình yếu cho web demo (ECDSA thật).
-
-TRÔNG NHƯ ĐƯỜNG CONG THẬT: cùng dạng với secp256k1  y^2 = x^3 + b  (a = 0),
-trường nguyên tố p ~256 bit, bậc điểm sinh n ~256 bit. Nhìn tham số công khai
-(a, b, p, n, G) gần như không phân biệt được với một đường cong chuẩn.
-
-ĐIỂM YẾU ẨN: chọn p ≡ 2 (mod 3) nên đường cong là SUPERSINGULAR và #E = p + 1;
-p được chọn sao cho p + 1 là số TRƠN (mọi thừa số nguyên tố ≤ ~2^36). Vì vậy dù
-n ~256 bit, chỉ cần PHÂN TÍCH THỪA SỐ n là thấy nó trơn → Pohlig–Hellman + BSGS
-khôi phục khóa riêng trong ~10-15s (thay vì ~2^128 như đường cong chuẩn).
-
-Sinh tự động bởi tools/gen_weak_curve.py — KHÔNG chỉnh tay.
-"""
 from .curve import EllipticCurve
 
 WEAK_CURVE = EllipticCurve(
