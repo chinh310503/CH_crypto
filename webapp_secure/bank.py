@@ -27,6 +27,11 @@ _PEOPLE = [
 
 class Bank:
     def __init__(self):
+        errors = crypto.validate_curve_params(crypto.P256_PARAMS)
+        if errors:
+            raise ValueError(
+                "Đường cong KHÔNG an toàn:\n  - " + "\n  - ".join(errors))
+
         self._tok_priv, self._tok_pub = crypto.server_keypair_pem()
         rnd = random.Random(20260908)
         self.users = {}

@@ -19,6 +19,55 @@ P256_PARAMS = {
     "Gy": str(0x4fe342e2fe1a7f9b8ee7eb4a7c0f9e162bce33576b315ececbb6406837bf51f5),
 }
 
+_SMALL_PRIMES = [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37]
+
+
+def _is_prime(n: int) -> bool:
+    if n < 2:
+        return False
+    for p in _SMALL_PRIMES:
+        if n % p == 0:
+            return n == p
+    d, r = n - 1, 0
+    while d % 2 == 0:
+        d //= 2
+        r += 1
+    for a in _SMALL_PRIMES:
+        x = pow(a, d, n)
+        if x in (1, n - 1):
+            continue
+        for _ in range(r - 1):
+            x = x * x % n
+            if x == n - 1:
+                break
+        else:
+            return False
+    return True
+
+
+def validate_curve_params(params: dict) -> list[str]:
+    errors = []
+    a, b = int(params["a"]), int(params["b"])
+    p, n = int(params["p"]), int(params["n"])
+    Gx, Gy = int(params["Gx"]), int(params["Gy"])
+
+    if not _is_prime(n):
+        errors.append(f"Bậc n KHÔNG là số nguyên tố")
+
+    lhs = pow(Gy, 2, p)
+    rhs = (pow(Gx, 3, p) + a * Gx + b) % p
+    if lhs != rhs:
+        errors.append("Điểm sinh G KHÔNG nằm trên đường cong")
+
+    disc = (4 * pow(a, 3, p) + 27 * pow(b, 2, p)) % p
+    if disc == 0:
+        errors.append("Đường cong là supersingular (discriminant = 0)")
+
+    if not _is_prime(p):
+        errors.append("Modulus p KHÔNG là số nguyên tố")
+
+    return errors
+
 
 def _b64u(raw: bytes) -> str:
     return base64.urlsafe_b64encode(raw).decode().rstrip("=")
