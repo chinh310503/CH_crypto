@@ -48,8 +48,13 @@ def sign_tx(priv, message: bytes):
     return decode_dss_signature(priv.sign(message, ec.ECDSA(hashes.SHA256())))
 
 
+N = int(P256_PARAMS["n"])
+
+
 def verify_tx(pub, message: bytes, r: int, s: int) -> bool:
-    if not (r > 0 and s > 0):
+    if not isinstance(r, int) or not isinstance(s, int):
+        return False
+    if not (0 < r < N and 0 < s < N):
         return False
     try:
         pub.verify(encode_dss_signature(r, s), message, ec.ECDSA(hashes.SHA256()))

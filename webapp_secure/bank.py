@@ -74,13 +74,21 @@ class Bank:
         return self.submit_tx(tx, r, s)
 
     def submit_tx(self, tx, r, s):
+        if not isinstance(tx.get("id"), int) or tx["id"] <= 0:
+            return False, "Mã giao dịch không hợp lệ"
+        if not isinstance(tx.get("amount"), int) or tx["amount"] <= 0:
+            return False, "Số tiền không hợp lệ"
         frm, to = tx.get("from"), tx.get("to")
+        if not isinstance(frm, str) or not isinstance(to, str):
+            return False, "Tên tài khoản không hợp lệ"
+        if frm == to:
+            return False, "Không thể chuyển cho chính mình"
         if frm not in self.users or to not in self.users:
             return False, "Tài khoản không tồn tại"
         if tx["id"] in self.used_ids:
             return False, "Mã giao dịch đã dùng"
-        if tx["amount"] <= 0:
-            return False, "Số tiền không hợp lệ"
+        if not isinstance(r, int) or not isinstance(s, int) or r <= 0 or s <= 0:
+            return False, "Chữ ký (r, s) không hợp lệ"
         acct = self.users[frm]
         if not crypto.verify_tx(acct["pub"], tx_bytes(tx), r, s):
             return False, "Chữ ký KHÔNG hợp lệ"
