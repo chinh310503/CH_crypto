@@ -60,7 +60,7 @@
     const CUR = "{{ currency }}";
     const fmt = n => Number(n).toLocaleString('vi-VN');
 
-    // Chuẩn hóa GIỐNG HỆT bank.tx_bytes (khóa sắp xếp: amount, from, id, to).
+
     const txBytes = tx => `{"amount":${tx.amount},"from":"${tx.from}","id":${tx.id},"to":"${tx.to}"}`;
     const hex = a => [...a].map(x => x.toString(16).padStart(2, '0')).join('');
 
@@ -69,11 +69,11 @@
       const r = await fetch('/api/wallet');
       if (r.status === 401) { window.location = '/login'; return; }
       WALLET = await r.json();
-      // Nạp khóa riêng vào WebCrypto (ECDSA P-256), non-extractable (không xuất lại được).
+
       PRIV = await crypto.subtle.importKey('jwk', WALLET.jwk,
         { name: 'ECDSA', namedCurve: 'P-256' }, false, ['sign']);
     }
-    // Ký ECDSA P-256 bằng WebCrypto — nonce do trình duyệt sinh an toàn, không lặp.
+    
     async function signTx(msg) {
       const sig = new Uint8Array(await crypto.subtle.sign(
         { name: 'ECDSA', hash: 'SHA-256' }, PRIV, new TextEncoder().encode(msg)));
